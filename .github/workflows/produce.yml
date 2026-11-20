@@ -65,22 +65,30 @@ jobs:
           YT_COOKIES: ${{ secrets.YT_COOKIES }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          BUFFER_ACCESS_TOKEN: ${{ secrets.BUFFER_ACCESS_TOKEN }}
+          # Optional public URLs for the rendered files (Buffer requires publicly reachable media)
+          WIDE_URL: ${{ secrets.WIDE_URL }}
+          SHORTS_URL: ${{ secrets.SHORTS_URL }}
         run: |
           python - << 'PY'
           from pipeline_lib.queue_manager import next_ready, mark_done, ensure_queue
           from pipeline_lib.qc import qc_video
-          from pipeline_lib.uploader import upload_dual
+          from pipeline_lib.uploader import publish_via_buffer
           from pathlib import Path
-          import subprocess, sys
+          import os, sys
           ensure_queue()
           item = next_ready()
           if not item:
               print("no pending item")
               sys.exit(0)
           print("processing", item["id"], item["topic"])
-          # placeholder: real run would call vicestyle.py with downloaded clips + song
-          # For now we just mark a dry-run success so the workflow is valid
-          print("dry-run complete for", item["id"])
+          # Real production would render here and host the mp4s at public URLs.
+          # For now we publish if public URLs are provided via secrets, else skip gracefully.
+          wide_url = os.environ.get("WIDE_URL") or None
+          shorts_url = os.environ.get("SHORTS_URL") or None
+          title = item.get("topic") or "RIYIO edit"
+          result = publish_via_buffer(wide_url, shorts_url, title, title)
+          print("Buffer result:", result)
           mark_done(item["id"])
           PY
 
