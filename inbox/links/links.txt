@@ -1,0 +1,4 @@
+# Put your clean clip links here (one per line)
+# X, YouTube, or direct mp4
+# Example:
+# https://x.com/user/status/1234567890

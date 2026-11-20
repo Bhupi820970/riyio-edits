@@ -23,6 +23,7 @@ from pipeline_lib.sourcing import (
     ytdlp_cookie_args, search_queries_for, vet_keyframes_with_groq,
     pick_song_from_bank, yt_song_cmd, GENRE_MOOD,
 )
+from pipeline_lib.links import load_clip_links
 
 
 def _run(cmd, timeout=400, check=True):
@@ -35,29 +36,30 @@ def _run(cmd, timeout=400, check=True):
     return r
 
 
-def download_yt(query: str, out_path: Path, kind: str) -> dict:
-    """Download one result. Returns info dict with title/id. Raises on failure."""
+def download_yt(query_or_url: str, out_path: Path, kind: str) -> dict:
+    """Download one result or direct URL. Returns info dict with title/id. Raises on failure."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
     info_json = out_path.with_suffix(".info.json")
+    is_url = query_or_url.startswith("http")
+    target = query_or_url if is_url else f"ytsearch1:{query_or_url}"
     cmd = [
         "yt-dlp", "--no-playlist",
         "--js-runtimes", "deno",
-        "--extractor-args", "youtube:player_client=web,default",
+        "--extractor-args", "youtube:player_client=tv,mweb",
         "--print-to-file", "title", str(info_json.with_suffix(".title")),
         "--print-to-file", "id", str(info_json.with_suffix(".id")),
         "-f", "bv*[height<=1080]+ba/b[height<=1080]/b",
         "--merge-output-format", "mp4",
         "-o", str(out_path),
-        f"ytsearch1:{query}",
+        target,
     ]
     cmd += ytdlp_cookie_args()
     _run(cmd, timeout=240)
     if not out_path.exists():
-        # yt-dlp may have written with different ext
         candidates = list(out_path.parent.glob(out_path.stem + ".*"))
         real = next((p for p in candidates if p.suffix.lower() in {".mp4", ".mkv", ".webm", ".m4a", ".mp3"}), None)
         if not real:
-            raise RuntimeError(f"{kind} download produced no file for query: {query}")
+            raise RuntimeError(f"{kind} download produced no file for: {query_or_url}")
         real.rename(out_path)
     title = ""
     vid = ""
@@ -68,7 +70,7 @@ def download_yt(query: str, out_path: Path, kind: str) -> dict:
     if ifile.exists():
         vid = ifile.read_text().strip()
     print(f"DOWNLOADED {kind}: title='{title}' id='{vid}' path={out_path}")
-    return {"title": title, "id": vid, "path": out_path}
+    return {"title": title, "id": vid, "path": out_path, "source": query_or_url}
 
 
 def extract_keyframes(video: Path, n: int = 4) -> list[str]:
@@ -136,18 +138,29 @@ def main():
     else:
         print("USING SONG FROM BANK:", song_path)
 
-    # Real clip download
-    queries = search_queries_for(genre, topic)
+    # Clip: prefer inbox/links first, then search
     clip_path = Path("clips/clip.mp4")
     clip_info = None
     last_err = None
-    for q in queries[:3]:
-        try:
-            clip_info = download_yt(q, clip_path, "CLIP")
-            break
-        except Exception as e:
-            last_err = e
-            print("clip try failed:", e)
+    links = load_clip_links()
+    if links:
+        print("FOUND", len(links), "links in inbox/links")
+        for link in links[:3]:
+            try:
+                clip_info = download_yt(link, clip_path, "CLIP")
+                break
+            except Exception as e:
+                last_err = e
+                print("link failed:", link, e)
+    if not clip_info:
+        queries = search_queries_for(genre, topic)
+        for q in queries[:3]:
+            try:
+                clip_info = download_yt(q, clip_path, "CLIP")
+                break
+            except Exception as e:
+                last_err = e
+                print("search try failed:", e)
     if not clip_info:
         raise SystemExit(f"CLIP DOWNLOAD FAILED — no fallback. Last error: {last_err}")
 
