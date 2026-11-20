@@ -1,4 +1,44 @@
-# Put your clean clip links here (one per line)
-# X, YouTube, or direct mp4
-# Example:
-# https://x.com/user/status/1234567890
+# X Clip Links — genre-wise (5-6 per genre)
+# One link per line. Code reads these first.
+
+# === MOVIES ===
+https://x.com/babydolljungwon/status/2123817074359222390
+https://x.com/Dhanush_rithik5/status/2123806905965609190
+https://x.com/Old_But_Gold50s/status/2123801040210518476
+https://x.com/iamahmedfaraz66/status/2123794423335313628
+https://x.com/Queenjulie001/status/2123826578580759014
+
+# === ANIME ===
+https://x.com/adrienschatnoir/status/2123828642409013426
+https://x.com/unonumero_56/status/2123810088871723281
+https://x.com/sunna_nikki/status/2123801299791614159
+https://x.com/AnimeBasee/status/2123793491671364000
+https://x.com/Dewale001star/status/2123789194438791502
+
+# === ROMANCE ===
+https://x.com/everslay13/status/2123828887037902920
+https://x.com/TanYuyu_CH3/status/2123823688684286450
+https://x.com/nirsha000/status/2123818493107896718
+https://x.com/kobaHUB/status/2123822620604842070
+
+# === GAMING ===
+https://x.com/Nteupdates/status/2123825701438521599
+https://x.com/mrpyo1/status/2123824222292123675
+https://x.com/carlyraewiki/status/2123824091106799819
+https://x.com/sean_wallace_/status/2123821039604158833
+
+# === SPORTS ===
+https://x.com/kayzeed_/status/2123826415934279685
+https://x.com/Conf_League/status/2123825286554992739
+https://x.com/ToqueSports/status/2123823556081627158
+https://x.com/Halvinebukachi/status/2123815448571527557
+
+# === RACING / F1 ===
+https://x.com/Colapintismo/status/2123712318856987008
+https://x.com/Nachez98/status/2123622226301800736
+https://x.com/ln4norris/status/2123570737290076523
+
+# === MOTIVATION ===
+https://x.com/FuentesUpdates/status/2123823687300251823
+https://x.com/santhu0452/status/2123820968867233982
+https://x.com/ohgawdjay/status/2123820611856421014
