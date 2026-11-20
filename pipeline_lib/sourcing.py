@@ -1,4 +1,8 @@
-"""Sourcing helpers: cookies, search queries, song bank, vet."""
+"""Sourcing helpers: cookies, search queries, song bank, vet.
+
+RapidAPI YouTube client available via rapidapi_yt.yt_client
+(uses YT_RAPIDAPI_KEY_1..4 rotation).
+"""
 from __future__ import annotations
 
 import base64
@@ -20,6 +24,11 @@ GENRE_MOOD = {
     "anime": "epic",
     "motivation": "dark",
 }
+
+try:
+    from .rapidapi_yt import yt_client
+except Exception:
+    yt_client = None
 
 
 def ytdlp_cookie_args() -> list[str]:
@@ -44,7 +53,13 @@ def search_queries_for(genre: str, topic: str) -> list[str]:
 
 
 def vet_keyframes_with_groq(frames: list[str], title: str = "", channel: str = "") -> dict:
-    return {"accept": True, "reason": "soft"}
+    """Reject clips with watermarks, face-cams, corner logos, scoreboards."""
+    # Soft default; real vision check should be wired in run_real / qc
+    bad_keywords = ("watermark", "logo", "subscribe", "face cam", "webcam", "overlay", "scoreboard", "streamer")
+    text = f"{title} {channel}".lower()
+    if any(k in text for k in bad_keywords):
+        return {"accept": False, "reason": "title/channel indicates overlay or watermark"}
+    return {"accept": True, "reason": "soft-pass (vision recommended)"}
 
 
 def load_catalog() -> list[dict]:
