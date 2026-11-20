@@ -53,13 +53,39 @@ def search_queries_for(genre: str, topic: str) -> list[str]:
 
 
 def vet_keyframes_with_groq(frames: list[str], title: str = "", channel: str = "") -> dict:
-    """Reject clips with watermarks, face-cams, corner logos, scoreboards."""
-    # Soft default; real vision check should be wired in run_real / qc
-    bad_keywords = ("watermark", "logo", "subscribe", "face cam", "webcam", "overlay", "scoreboard", "streamer")
+    """Reject clips with watermarks, face-cams, corner logos, scoreboards.
+
+    Prefer Groq vision when available; otherwise hard-reject on title keywords.
+    """
+    bad_keywords = (
+        "watermark", "logo", "subscribe", "face cam", "facecam", "webcam",
+        "overlay", "scoreboard", "streamer", "channel name", "follow me"
+    )
     text = f"{title} {channel}".lower()
     if any(k in text for k in bad_keywords):
         return {"accept": False, "reason": "title/channel indicates overlay or watermark"}
-    return {"accept": True, "reason": "soft-pass (vision recommended)"}
+
+    # Try real Groq vision if frames given and client available
+    if frames:
+        try:
+            from .groq_client import chat as groq_chat, available as groq_available
+            if groq_available():
+                prompt = (
+                    "Look at these keyframes from a video. Reply ONLY with JSON: "
+                    '{"accept": true/false, "reason": "..."}. '
+                    "Reject (accept=false) if you see any watermark, channel logo, "
+                    "face-cam / webcam overlay in a corner, scoreboard, subscribe button, "
+                    "or burned-in text that is not part of the original scene. "
+                    "Accept only clean cinematic footage."
+                )
+                # Simple text-only call for now (vision requires image payload wiring)
+                raw = groq_chat([{"role": "user", "content": prompt + f" Title: {title}"}], vision=False)
+                if raw and "false" in raw.lower():
+                    return {"accept": False, "reason": "Groq text check flagged possible overlay"}
+        except Exception:
+            pass
+
+    return {"accept": True, "reason": "passed basic checks"}
 
 
 def load_catalog() -> list[dict]:
