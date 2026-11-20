@@ -13,6 +13,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Make pipeline_lib importable when script is run from repo root
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 CATALOG = Path("config/songs_catalog.json")
 REPO = os.environ.get("REPO", "Bhupi820970/riyio-edits")
 RELEASE = "songs-bank"
@@ -43,7 +46,6 @@ def download_one(title: str, artist: str, out: Path) -> bool:
     try:
         from pipeline_lib.rapidapi_yt import yt_client
         dl = yt_client.download(f"https://www.youtube.com/results?search_query={query.replace(' ', '+')}", "mp3")
-        # Note: real search + download needs proper endpoint; this is skeleton
         if dl:
             r = subprocess.run(["curl", "-fsSL", "-o", str(out), dl], capture_output=True)
             if r.returncode == 0 and out.exists() and out.stat().st_size > 50_000:
@@ -63,8 +65,11 @@ def download_one(title: str, artist: str, out: Path) -> bool:
     ]
     cookies = os.environ.get("YT_COOKIES", "").strip()
     if cookies:
-        from pipeline_lib.sourcing import ytdlp_cookie_args
-        cmd += ytdlp_cookie_args()
+        try:
+            from pipeline_lib.sourcing import ytdlp_cookie_args
+            cmd += ytdlp_cookie_args()
+        except Exception:
+            pass
     r = run(cmd, timeout=180)
     return out.exists() and out.stat().st_size > 50_000
 
