@@ -79,10 +79,27 @@ def list_channels(org_id: str) -> list[dict]:
     return data.get("channels") or []
 
 
-def create_video_post(channel_id: str, text: str, video_url: str | None) -> dict:
+def create_video_post(channel_id: str, text: str, video_url: str | None,
+                      service: str | None = None, title: str | None = None) -> dict:
     assets = []
     if video_url:
         assets = [{"video": {"url": video_url}}]
+    input_obj: dict = {
+        "text": text or "RIYIO edit",
+        "channelId": channel_id,
+        "schedulingType": "automatic",
+        "mode": "addToQueue",
+        "assets": assets,
+    }
+    # YouTube requires title + category; Shorts also prefer vertical
+    if service and "youtube" in service.lower():
+        input_obj["metadata"] = {
+            "youtube": {
+                "title": (title or text or "RIYIO Edit")[:70],
+                "category": "Entertainment",
+                "madeForKids": False,
+            }
+        }
     mutation = """
         mutation CreatePost($input: CreatePostInput!) {
           createPost(input: $input) {
@@ -95,16 +112,7 @@ def create_video_post(channel_id: str, text: str, video_url: str | None) -> dict
           }
         }
     """
-    variables = {
-        "input": {
-            "text": text or "RIYIO edit",
-            "channelId": channel_id,
-            "schedulingType": "automatic",
-            "mode": "addToQueue",
-            "assets": assets,
-        }
-    }
-    return _gql(mutation, variables)
+    return _gql(mutation, {"input": input_obj})
 
 
 def _service_match(service: str, targets: set[str]) -> bool:
@@ -113,14 +121,15 @@ def _service_match(service: str, targets: set[str]) -> bool:
 
 
 def publish_via_buffer(
-    wide_url: str | None,
     shorts_url: str | None,
     title: str,
     caption: str = "",
+    demo_only: bool = False,
 ) -> dict:
-    """Post 16:9 to YouTube+X channels, 9:16 to Instagram channels.
+    """Post the SAME 4K 9:16 vertical Shorts to YouTube, X, and Instagram.
 
-    Returns a summary dict. Never raises if token is missing.
+    YouTube receives title + category=Entertainment + madeForKids=false.
+    If demo_only is True, channel list is printed but no posts are created.
     """
     token = _token()
     if not token:
@@ -140,41 +149,37 @@ def publish_via_buffer(
         print(f"Buffer channel list failed: {e}")
         return {"skipped": True, "reason": str(e)}
 
-    yt_x = [c for c in channels if _service_match(c.get("service", ""), {"youtube", "twitter", "x"})]
-    ig = [c for c in channels if _service_match(c.get("service", ""), {"instagram"})]
+    if demo_only:
+        print("DEMO_ONLY=true — Buffer posting skipped")
+        return {"skipped": True, "reason": "demo_only", "channels": len(channels)}
 
+    targets = [c for c in channels if _service_match(
+        c.get("service", ""), {"youtube", "twitter", "x", "instagram"}
+    )]
     text = caption or title or "RIYIO 4K edit"
-    results = {"youtube_x": [], "instagram": [], "skipped": False}
+    results = {"posts": [], "skipped": False}
 
-    for ch in yt_x:
-        if not wide_url:
-            print(f"[{ch.get('service')}] no public 16:9 URL — skipping {ch.get('name')}")
-            continue
-        try:
-            res = create_video_post(ch["id"], text, wide_url)
-            results["youtube_x"].append({"channel": ch.get("name"), "ok": True, "res": res})
-            print(f"Buffer posted 16:9 to {ch.get('service')} / {ch.get('name')}")
-        except Exception as e:
-            results["youtube_x"].append({"channel": ch.get("name"), "ok": False, "error": str(e)})
-            print(f"Buffer fail {ch.get('name')}: {e}")
-
-    for ch in ig:
+    for ch in targets:
         if not shorts_url:
-            print(f"[instagram] no public 9:16 URL — skipping {ch.get('name')}")
+            print(f"[{ch.get('service')}] no public 9:16 URL — skipping {ch.get('name')}")
             continue
         try:
-            res = create_video_post(ch["id"], text, shorts_url)
-            results["instagram"].append({"channel": ch.get("name"), "ok": True, "res": res})
-            print(f"Buffer posted 9:16 to Instagram / {ch.get('name')}")
+            res = create_video_post(
+                ch["id"], text, shorts_url,
+                service=ch.get("service"), title=title,
+            )
+            results["posts"].append({"channel": ch.get("name"), "service": ch.get("service"), "ok": True, "res": res})
+            print(f"Buffer posted 9:16 to {ch.get('service')} / {ch.get('name')}")
         except Exception as e:
-            results["instagram"].append({"channel": ch.get("name"), "ok": False, "error": str(e)})
+            results["posts"].append({"channel": ch.get("name"), "service": ch.get("service"), "ok": False, "error": str(e)})
             print(f"Buffer fail {ch.get('name')}: {e}")
 
     return results
 
 
-# Backwards-compatible wrapper used by pipeline.py
+# Backwards-compatible wrapper
 def upload_dual(wide: Path, shorts: Path, title: str, caption: str = "",
-                wide_url: str | None = None, shorts_url: str | None = None) -> dict:
-    """If public URLs are supplied, publish via Buffer. Otherwise skip gracefully."""
-    return publish_via_buffer(wide_url, shorts_url, title, caption)
+                wide_url: str | None = None, shorts_url: str | None = None,
+                demo_only: bool = False) -> dict:
+    """All platforms now receive the 9:16 shorts URL."""
+    return publish_via_buffer(shorts_url or wide_url, title, caption, demo_only=demo_only)

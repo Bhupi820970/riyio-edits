@@ -20,6 +20,11 @@ on:
         description: "videos to produce"
         default: "1"
         required: false
+      demo_only:
+        description: "Render real video + upload to media-cache, but skip Buffer posting"
+        type: boolean
+        default: false
+        required: false
 
 permissions:
   contents: write
@@ -73,7 +78,7 @@ jobs:
         run: |
           python -c "from pipeline_lib.queue_manager import ensure_queue; ensure_queue()"
 
-      - name: Produce videos + publish via Buffer
+      - name: Produce real video + optional Buffer
         env:
           YT_COOKIES: ${{ secrets.YT_COOKIES }}
           BUFFER_ACCESS_TOKEN: ${{ secrets.BUFFER_ACCESS_TOKEN }}
@@ -86,52 +91,51 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
+          DEMO_ONLY: ${{ inputs.demo_only || 'false' }}
         run: |
           set -euo pipefail
+          # Real end-to-end: sourcing -> whisper -> vicestyle 4K -> qc -> meta
+          python run_real.py
+
+          # Prefer the 9:16 shorts output
+          SRC=$(ls -1 out.shorts.mp4 out.wide.mp4 2>/dev/null | head -1 || true)
+          if [ -z "$SRC" ]; then
+            echo "No rendered video found"
+            exit 1
+          fi
+
           # Ensure rolling media-cache release exists
           gh release view media-cache --repo "$REPO" >/dev/null 2>&1 || \
             gh release create media-cache --repo "$REPO" --title "RIYIO media cache" --notes "Rolling public media for Buffer" || true
 
-          # Minimal valid test renders if real clips not present (so Buffer can be verified)
-          # In full production this is replaced by vicestyle.py dual render
-          if [ ! -f out.wide.mp4 ]; then
-            ffmpeg -y -f lavfi -i color=c=black:s=1280x720:d=3 -f lavfi -i sine=frequency=440:duration=3 \
-              -c:v libx264 -pix_fmt yuv420p -c:a aac -shortest out.wide.mp4
-          fi
-          if [ ! -f out.shorts.mp4 ]; then
-            ffmpeg -y -f lavfi -i color=c=black:s=720x1280:d=3 -f lavfi -i sine=frequency=440:duration=3 \
-              -c:v libx264 -pix_fmt yuv420p -c:a aac -shortest out.shorts.mp4
-          fi
-
-          # Unique names so release overwrites cleanly
           TS=$(date +%s)
-          cp out.wide.mp4 "wide_${TS}.mp4"
-          cp out.shorts.mp4 "shorts_${TS}.mp4"
+          OUT="shorts_${TS}.mp4"
+          cp "$SRC" "$OUT"
+          gh release upload media-cache "$OUT" --repo "$REPO" --clobber
 
-          gh release upload media-cache "wide_${TS}.mp4" "shorts_${TS}.mp4" \
-            --repo "$REPO" --clobber
-
-          WIDE_URL="https://github.com/${REPO}/releases/download/media-cache/wide_${TS}.mp4"
-          SHORTS_URL="https://github.com/${REPO}/releases/download/media-cache/shorts_${TS}.mp4"
-          echo "WIDE_URL=$WIDE_URL"
+          SHORTS_URL="https://github.com/${REPO}/releases/download/media-cache/${OUT}"
           echo "SHORTS_URL=$SHORTS_URL"
-          export WIDE_URL SHORTS_URL
+          export SHORTS_URL
+
+          # Print meta
+          if [ -f meta.json ]; then
+            echo "==== GENERATED META ===="
+            cat meta.json
+          fi
 
           python - << 'PY'
-          import os
-          from pipeline_lib.queue_manager import next_ready, mark_done, ensure_queue
+          import os, json
           from pipeline_lib.uploader import publish_via_buffer
-          ensure_queue()
-          item = next_ready() or {"id": "test", "topic": "RIYIO test edit"}
-          print("processing", item.get("id"), item.get("topic"))
-          wide_url = os.environ.get("WIDE_URL")
+          demo = os.environ.get("DEMO_ONLY", "false").lower() in ("1", "true", "yes")
           shorts_url = os.environ.get("SHORTS_URL")
-          result = publish_via_buffer(wide_url, shorts_url,
-                                      item.get("topic") or "RIYIO edit",
-                                      item.get("topic") or "RIYIO edit")
+          meta = {}
+          if os.path.exists("meta.json"):
+              meta = json.load(open("meta.json"))
+          title = meta.get("title_youtube") or meta.get("hook") or "RIYIO Edit"
+          caption = meta.get("caption_x") or meta.get("hook") or title
+          print("DEMO_ONLY =", demo)
+          result = publish_via_buffer(shorts_url, title, caption, demo_only=demo)
           print("Buffer result:", result)
-          if item.get("id") != "test":
-              mark_done(item["id"])
           PY
 
       - name: Upload rendered videos as artifacts
