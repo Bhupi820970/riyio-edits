@@ -19,7 +19,10 @@ from pathlib import Path
 from pipeline_lib.queue_manager import next_ready, mark_done, ensure_queue
 from pipeline_lib.meta import generate_metadata
 from pipeline_lib.qc import qc_video
-from pipeline_lib.sourcing import ytdlp_cookie_args, search_queries_for, vet_keyframes_with_groq
+from pipeline_lib.sourcing import (
+    ytdlp_cookie_args, search_queries_for, vet_keyframes_with_groq,
+    pick_song_from_bank, yt_song_cmd, GENRE_MOOD,
+)
 
 
 def _run(cmd, timeout=400, check=True):
@@ -115,10 +118,23 @@ def main():
     genre = item.get("genre", "movies")
     topic = item.get("topic", "cinematic dialogue scene")
 
-    # Real song download
-    song_query = item.get("song_query") or f"{genre} trending soundtrack"
-    song_path = Path("song.mp3")
-    song_info = download_yt(song_query + " audio", song_path, "SONG")
+    # Song: songs-bank / local songs/ first, then YouTube with PO Token
+    songs_dir = Path("songs")
+    songs_dir.mkdir(exist_ok=True)
+    song_path = pick_song_from_bank(genre, songs_dir)
+    song_info = {"source": "songs-bank", "path": str(song_path)} if song_path else None
+    if not song_path:
+        song_path = Path("song.mp3")
+        song_query = item.get("song_query") or f"{GENRE_MOOD.get(genre, 'epic')} cinematic soundtrack"
+        cmd = yt_song_cmd(song_query, song_path)
+        try:
+            _run(cmd, timeout=240)
+            song_info = {"source": "youtube", "query": song_query, "path": str(song_path)}
+            print("DOWNLOADED SONG from YouTube:", song_query)
+        except Exception as e:
+            raise SystemExit(f"SONG DOWNLOAD FAILED — no songs-bank match and YouTube failed: {e}")
+    else:
+        print("USING SONG FROM BANK:", song_path)
 
     # Real clip download
     queries = search_queries_for(genre, topic)
@@ -150,6 +166,13 @@ def main():
 
     # Savage hook from real transcript
     meta = generate_metadata(topic, genre, transcript)
+    if song_info and song_info.get("source") == "songs-bank":
+        meta["song_name"] = Path(song_info["path"]).stem
+    elif song_info and song_info.get("query"):
+        meta["song_name"] = song_info["query"]
+    # Ensure credits are present
+    if "Clip:" not in meta.get("description", ""):
+        meta["description"] = meta.get("description", "").rstrip() + f"\n\nClip: {topic} | Audio: {meta.get('song_name', 'Original Mix')}"
     hook = (meta.get("hook") or topic)[:60]
     print("SAVAGE HOOK:", hook)
     Path("meta.json").write_text(json.dumps(meta, indent=2))

@@ -27,7 +27,8 @@ def generate_metadata(topic: str, genre: str, transcript: str = "") -> dict:
         "caption_x": topic[:200],
         "caption_instagram": topic[:150],
         "hashtags": ["#RIYIO", f"#{genre}", "#edit", "#cinematic", "#viral"],
-        "description": f"{genre} edit — {topic}",
+        "description": f"{genre} edit — {topic}\n\nClip: {topic} | Audio: Original Mix",
+        "song_name": "Original Mix",
     }
     if not groq_available():
         return fallback
@@ -79,13 +80,19 @@ Reply with JSON only, no markdown:
             tags = [t if t.startswith("#") else f"#{t}" for t in tags][:7]
             while len(tags) < 5:
                 tags.append("#RIYIO")
+            desc = data.get("description") or fallback["description"]
+            # Always append clean credits
+            credits = f"\n\nClip: {topic} | Audio: {data.get('song_name') or 'Original Mix'}"
+            if "Clip:" not in desc:
+                desc = desc.rstrip() + credits
             return {
                 "hook": (data.get("hook") or fallback["hook"])[:120],
                 "title_youtube": (data.get("title_youtube") or fallback["title_youtube"])[:70],
                 "caption_x": (data.get("caption_x") or fallback["caption_x"])[:240],
                 "caption_instagram": (data.get("caption_instagram") or fallback["caption_instagram"])[:150],
                 "hashtags": tags[:7],
-                "description": data.get("description") or fallback["description"],
+                "description": desc,
+                "song_name": data.get("song_name") or "Original Mix",
             }
     except Exception:
         pass
