@@ -199,9 +199,8 @@ def build_captions(segs: list[Seg], W: int, H: int, pattern: dict, base: Path,
     words = whisper_words or []
     if not words:
         return events
-    # group into short chunks of 2-3 words
     chunks = chunk_words(words, max_words=3)
-    for ch in chunks[:8]:  # keep it tight
+    for ch in chunks:  # full dialogue, not just first few
         s = ch[0]["s"]
         e = ch[-1]["e"]
         items = [(clean_word(w["word"]), pattern["keys"][i % len(pattern["keys"])],
@@ -352,10 +351,10 @@ def make_shorts(wide: Path, out: Path, hook: str, fpath: str):
     W, H = 2160, 3840
     BW, BH = 2160, 1215
     vy = (H - BH) // 2 + 80
-    bar_h = 280
-    bar = Image.new("RGBA", (W, bar_h), (255, 255, 255, 255))
+    bar_h = 140
+    bar = Image.new("RGBA", (W, bar_h), (255, 255, 255, 230))
     d = ImageDraw.Draw(bar)
-    size = 120
+    size = 72
     f = ImageFont.truetype(fpath, size)
     bb = d.textbbox((0, 0), hook or "", font=f)
     d.text(((W - (bb[2] - bb[0])) / 2, (bar_h - (bb[3] - bb[1])) / 2),

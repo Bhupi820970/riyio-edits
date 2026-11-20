@@ -31,7 +31,7 @@ def generate_metadata(topic: str, genre: str, transcript: str = "", song_credit:
         "song_name": "Original Mix",
     }
     if not groq_available():
-        return fallback
+        raise RuntimeError("Groq unavailable — refusing to fall back to queue ID for hook")
 
     prompt = f"""You are writing metadata for a cold, high-retention cinematic fan-edit.
 
@@ -42,13 +42,13 @@ Exact dialogue transcript from the scene (Whisper):
 
 Rules:
 - The hook MUST be short, savage, cold, and strictly based on THIS exact dialogue/scene.
-- Never generic. Never off-topic. Never invent lines that are not in the transcript.
-- Hook length: 1 line, max ~12 words, punchy.
+- Never generic. Never use the topic string or any ID as the hook.
+- Hook length: 1 line, max 8-10 words, punchy.
 - Then write platform-optimized versions:
-  - title_youtube: SEO-friendly, under 70 chars, includes the hook energy
+  - title_youtube: SEO-friendly, under 70 chars
   - caption_x: short, cold, under 240 chars
-  - caption_instagram: short, cold, under 150 chars (no long paragraphs)
-- hashtags: exactly 5–7 relevant tags (include genre + scene-specific, no spam)
+  - caption_instagram: short, cold, under 150 chars
+- hashtags: exactly 5–7 relevant tags
 
 Reply with JSON only, no markdown:
 {{
@@ -68,31 +68,37 @@ Reply with JSON only, no markdown:
         temperature=0.35,
     )
     if not raw:
-        return fallback
+        raise RuntimeError("Groq returned empty — refusing queue-ID hook fallback")
     try:
         start = raw.find("{")
         end = raw.rfind("}") + 1
-        if start >= 0 and end > start:
-            data = json.loads(raw[start:end])
-            tags = data.get("hashtags") or fallback["hashtags"]
-            if not isinstance(tags, list):
-                tags = fallback["hashtags"]
-            tags = [t if t.startswith("#") else f"#{t}" for t in tags][:7]
-            while len(tags) < 5:
-                tags.append("#RIYIO")
-            desc = data.get("description") or fallback["description"]
-            credit = song_credit or data.get("song_name") or "Original Mix"
-            if "Clip:" not in desc:
-                desc = desc.rstrip() + f"\n\nClip: {topic} | Audio: {credit}"
-            return {
-                "hook": (data.get("hook") or fallback["hook"])[:120],
-                "title_youtube": (data.get("title_youtube") or fallback["title_youtube"])[:70],
-                "caption_x": (data.get("caption_x") or fallback["caption_x"])[:240],
-                "caption_instagram": (data.get("caption_instagram") or fallback["caption_instagram"])[:150],
-                "hashtags": tags[:7],
-                "description": desc,
-                "song_name": credit,
-            }
-    except Exception:
-        pass
-    return fallback
+        if start < 0 or end <= start:
+            raise ValueError("no json")
+        data = json.loads(raw[start:end])
+        hook = (data.get("hook") or "").strip()
+        # Reject hooks that look like queue IDs or the raw topic
+        if not hook or any(x in hook.lower() for x in (topic.lower()[:20], "highlight", "9107", "race highlight")):
+            raise ValueError(f"bad hook: {hook}")
+        if len(hook.split()) > 12:
+            hook = " ".join(hook.split()[:10])
+        tags = data.get("hashtags") or []
+        if not isinstance(tags, list):
+            tags = []
+        tags = [t if str(t).startswith("#") else f"#{t}" for t in tags][:7]
+        while len(tags) < 5:
+            tags.append("#RIYIO")
+        desc = data.get("description") or f"{genre} edit"
+        credit = song_credit or "Original Mix"
+        if "Clip:" not in desc:
+            desc = desc.rstrip() + f"\n\nClip: {topic} | Audio: {credit}"
+        return {
+            "hook": hook[:80],
+            "title_youtube": (data.get("title_youtube") or hook)[:70],
+            "caption_x": (data.get("caption_x") or hook)[:240],
+            "caption_instagram": (data.get("caption_instagram") or hook)[:150],
+            "hashtags": tags[:7],
+            "description": desc,
+            "song_name": credit,
+        }
+    except Exception as e:
+        raise RuntimeError(f"Hook generation failed — no queue-ID fallback: {e}") from e

@@ -21,7 +21,7 @@ from pipeline_lib.meta import generate_metadata
 from pipeline_lib.qc import qc_video
 from pipeline_lib.sourcing import (
     ytdlp_cookie_args, search_queries_for, vet_keyframes_with_groq,
-    pick_song_from_bank, song_credit, GENRE_MOOD, load_catalog,
+    ensure_song_from_bank, song_credit, GENRE_MOOD,
 )
 from pipeline_lib.links import load_clip_links
 
@@ -120,15 +120,12 @@ def main():
     genre = item.get("genre", "movies")
     topic = item.get("topic", "cinematic dialogue scene")
 
-    # Song: local songs/ (from songs-bank) first — never YouTube for songs in daily runs
-    songs_dir = Path("songs")
-    songs_dir.mkdir(exist_ok=True)
-    song_path, song_entry = pick_song_from_bank(genre, songs_dir)
-    if not song_path:
-        raise SystemExit("NO SONG in songs/ — populate songs-bank or local songs/ first")
+    # Song: ONLY from songs-bank release (catalog). No local stock tracks.
+    song_path = Path("song.mp3")
+    song_path, song_entry = ensure_song_from_bank(genre, song_path)
     credit = song_credit(song_entry, song_path)
-    print("USING SONG:", song_path.name, "|", credit)
-    song_info = {"source": "songs-bank", "path": str(song_path), "credit": credit}
+    print("USING SONG FROM BANK:", song_entry["file"], "|", credit)
+    song_info = {"source": "songs-bank", "path": str(song_path), "credit": credit, "entry": song_entry}
 
     # Clip: prefer inbox/links first, then search
     clip_path = Path("clips/clip.mp4")
@@ -153,8 +150,17 @@ def main():
             except Exception as e:
                 last_err = e
                 print("search try failed:", e)
-    if not clip_info:
-        raise SystemExit(f"CLIP DOWNLOAD FAILED — no fallback. Last error: {last_err}")
+    # Reject short clips — need 20s+ so we don't loop a 3-second fragment
+    def _dur(p: Path) -> float:
+        try:
+            r = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                                "-of", "csv=p=0", str(p)], capture_output=True, text=True, timeout=20)
+            return float(r.stdout.strip() or 0)
+        except Exception:
+            return 0.0
+    if clip_info and _dur(clip_path) < 18:
+        print("CLIP TOO SHORT — rejecting")
+        raise SystemExit(f"CLIP TOO SHORT ({_dur(clip_path):.1f}s) — need >=20s source")
 
     # Groq 4-corner vet
     frames = extract_keyframes(clip_path)
