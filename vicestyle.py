@@ -189,33 +189,54 @@ def render_caption_block(items: list[tuple], fpath: str, anim: str = "pop") -> I
     return out
 
 
+def _words_for(src: str, whisper_words) -> list[dict]:
+    if not whisper_words:
+        return []
+    if isinstance(whisper_words, dict):
+        for k, v in whisper_words.items():
+            if Path(k).name == Path(src).name:
+                return v or []
+        return []
+    return whisper_words  # legacy single-clip list
+
+
 def build_captions(segs: list[Seg], W: int, H: int, pattern: dict, base: Path,
-                   whisper_words: list[dict] | None = None) -> list[dict]:
-    """Build beside-speaker captions from real Whisper word timings.
-    whisper_words: [{"word": str, "s": float, "e": float}, ...]
+                   whisper_words=None) -> list[dict]:
+    """Beside-speaker captions from real Whisper word timings, mapped onto the
+    EDIT timeline: every word spoken inside every dialogue segment is captioned
+    (full dialogue, not just the first few words).
+    whisper_words: {clip_path: [{"word","s","e"}]} or legacy list.
     """
     events = []
     fpath = CP.font_path(pattern.get("font_hint"))
-    words = whisper_words or []
-    if not words:
-        return events
-    chunks = chunk_words(words, max_words=3)
-    for ch in chunks:  # full dialogue, not just first few
-        s = ch[0]["s"]
-        e = ch[-1]["e"]
-        items = [(clean_word(w["word"]), pattern["keys"][i % len(pattern["keys"])],
-                  int(H * pattern["key"]))
-                 for i, w in enumerate(ch) if clean_word(w["word"])]
-        if not items:
+    for seg in segs:
+        if seg.kind != "dialogue":
             continue
-        img = render_caption_block(items, fpath, pattern.get("anim", "pop"))
-        x = int(W * 0.08) if hash(items[0][0]) % 2 == 0 else int(W * 0.58)
-        y = int(H * pattern["no_face_y"])
-        events.append({
-            "f0": int(s * FPS), "f1": int(min(e + 0.3, s + 3.5) * FPS), "img": img,
-            "x": x, "y": y, "text": " ".join(t for t, *_ in items),
-            "anim": pattern.get("anim", "pop"), "pop": True,
-        })
+        span = seg.t1 - seg.t0
+        local = []
+        for w in _words_for(seg.src, whisper_words):
+            if seg.start <= w["s"] < seg.start + span - 0.05:
+                d = seg.t0 - seg.start
+                local.append({"word": w["word"], "s": w["s"] + d, "e": min(w["e"] + d, seg.t1)})
+        for ch in chunk_words(local, max_words=3):
+            s = ch[0]["s"]
+            e = ch[-1]["e"]
+            items = [(clean_word(w["word"]), pattern["keys"][i % len(pattern["keys"])],
+                      int(H * pattern["key"]))
+                     for i, w in enumerate(ch) if clean_word(w["word"])]
+            if not items:
+                continue
+            img = render_caption_block(items, fpath, pattern.get("anim", "pop"))
+            x = int(W * 0.08) if len(events) % 2 == 0 else int(W * 0.58)
+            y = int(H * pattern["no_face_y"])
+            events.append({
+                "f0": int(s * FPS), "f1": int(min(max(e + 0.3, s + 0.6), s + 3.5, seg.t1) * FPS),
+                "img": img, "x": x, "y": y, "text": " ".join(t for t, *_ in items),
+                "anim": pattern.get("anim", "pop"), "pop": True,
+            })
+    events.sort(key=lambda e: e["f0"])
+    for a, b in zip(events, events[1:]):  # one caption block on screen at a time
+        a["f1"] = max(a["f0"] + 1, min(a["f1"], b["f0"]))
     return events
 
 
@@ -252,19 +273,15 @@ def apply_riyio_logo(im: Image.Image, fpath: str) -> Image.Image:
 
 # ---------- audio ----------
 def load_audio(path: Path, sr: int, start: float, dur: float) -> np.ndarray:
-    try:
-        import soundfile as sf
-        data, file_sr = sf.read(str(path), always_2d=True)
-        if file_sr != sr:
-            # crude resample
-            idx = np.linspace(0, len(data) - 1, int(len(data) * sr / file_sr)).astype(int)
-            data = data[idx]
-        a = int(start * sr)
-        b = a + int(dur * sr)
-        return data[a:b].astype(np.float32)
-    except Exception:
-        n = int(dur * sr)
-        return np.zeros((n, 2), np.float32)
+    """Decode [start, start+dur] of any audio/video file to float32 stereo via ffmpeg.
+    Raises if nothing could be decoded (no silent/dummy fallback)."""
+    r = subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{max(0.0, start):.3f}", "-t", f"{dur:.3f}",
+                        "-i", str(path), "-vn", "-ac", "2", "-ar", str(sr), "-f", "f32le", "-"],
+                       capture_output=True, timeout=300)
+    data = np.frombuffer(r.stdout, dtype=np.float32)
+    if r.returncode != 0 or data.size == 0:
+        raise RuntimeError(f"audio decode failed for {Path(path).name}: {r.stderr[-300:]!r}")
+    return data.reshape(-1, 2).copy()
 
 
 def mix_audio(song: Path, song_start: float, total: float, segs: list[Seg], out: Path,
@@ -424,6 +441,8 @@ def render(segs: list[Seg], song: Path, song_start: float | None, out: Path, mod
     # Load real Whisper words if the runner wrote them
     ww = whisper_words
     if ww is None:
+        ww = load_whisper_map() or None
+    if ww is None:
         wj = Path("whisper_words.json")
         if wj.exists():
             try:
@@ -440,7 +459,11 @@ def render(segs: list[Seg], song: Path, song_start: float | None, out: Path, mod
     meta = {
         "duration": total, "shots": len(segs), "tempo": binfo["tempo"],
         "wide": str(wide_out), "shorts": str(shorts_out) if shorts_out else None,
-        "pattern": pat["id"], "mode": mode,
+        "pattern": pat["id"], "mode": mode, "hook": hook,
+        "captions": len(events), "caption_text": [e["text"] for e in events],
+        "dialogue_s": round(sum(s.t1 - s.t0 for s in segs if s.kind == "dialogue"), 2),
+        "segments": [{"kind": s.kind, "src": Path(s.src).name, "start": round(s.start, 2),
+                      "len": round(s.t1 - s.t0, 2)} for s in segs],
     }
     Path(str(out) + ".json").write_text(json.dumps(meta, indent=2))
     shutil.rmtree(tmp, ignore_errors=True)
@@ -448,61 +471,137 @@ def render(segs: list[Seg], song: Path, song_start: float | None, out: Path, mod
 
 
 # ---------- planning ----------
-def dialogue_windows(path: Path) -> list[dict]:
-    """Return windows with 3.5s <= dur <= 8.5s. Real impl uses whisper."""
-    dur = probe_duration(path)
-    if dur < 4:
-        return []
-    # placeholder: one window in the middle
-    s = max(0.5, dur * 0.3)
-    e = min(dur - 0.5, s + 5.5)
-    if e - s < 3.5:
-        return []
-    return [{"src": str(path), "s": s, "e": min(e, s + 8.5), "score": 1.0,
-             "text": "sample dialogue line"}]
+MIN_SRC_S = 20.0
+
+
+def load_whisper_map() -> dict:
+    wj = Path("whisper_words.json")
+    if not wj.exists():
+        return {}
+    try:
+        data = json.loads(wj.read_text())
+    except Exception:
+        return {}
+    return data if isinstance(data, (dict, list)) else {}
+
+
+def dialogue_windows(path: Path, words: list[dict] | None = None) -> list[dict]:
+    """Real speech windows (2.5s-8.5s) built from Whisper word timings."""
+    words = words or []
+    wins = []
+    cur = []
+    for w in words:
+        if cur and (w["s"] - cur[-1]["e"] > 0.7 or w["e"] - cur[0]["s"] > 8.5
+                    or cur[-1]["word"].rstrip().endswith((".", "!", "?"))):
+            wins.append(cur)
+            cur = []
+        cur.append(w)
+    if cur:
+        wins.append(cur)
+    out = []
+    for ws in wins:
+        s, e = ws[0]["s"], ws[-1]["e"]
+        if e - s < 1.2 or len(ws) < 3:
+            continue
+        if e - s < 2.5:
+            e = s + 2.5
+        text = " ".join(w["word"] for w in ws)
+        out.append({"src": str(path), "s": s, "e": min(e, s + 8.5),
+                    "score": len(ws) / max(1.0, e - s) + (1.0 if text.strip().endswith(("!", "?")) else 0),
+                    "text": text})
+    return out
 
 
 def auto_plan(song: Path, clips: Path, target: float, binfo: dict,
               mode: str = "classic") -> list[Seg]:
-    """Build edit plan. Supports classic alternating and build_drop modes."""
+    """Edit plan: real Whisper dialogue windows alternating with montage shots.
+
+    Every shot uses a UNIQUE, non-overlapping range of source footage: no shot
+    is ever repeated or looped. Sources shorter than 20s are refused.
+    """
     period = binfo["period"]
     files = sorted(p for p in clips.iterdir() if p.suffix.lower() in VIDEO_EXT)
+    durs = {str(f): probe_duration(f) for f in files}
+    files = [f for f in files if durs[str(f)] >= MIN_SRC_S]
     if not files:
-        raise RuntimeError("no clips found")
-    wins = []
-    for f in files:
-        wins += dialogue_windows(f)
-    # text-overlap dedup >= 0.40
+        raise RuntimeError(f"no source clip >= {MIN_SRC_S:.0f}s — refusing to loop short clips")
+    wmap = load_whisper_map()
+    used: dict[str, list[tuple[float, float]]] = {str(f): [] for f in files}
+
+    def free(src, s, e):
+        return s >= 0.3 and e <= durs[src] - 0.3 and all(e <= a or s >= b for a, b in used[src])
+
     def overlap(a, b):
         w1 = set(re.findall(r"[a-z]{3,}", a.lower()))
         w2 = set(re.findall(r"[a-z]{3,}", b.lower()))
         return len(w1 & w2) / max(1, min(len(w1), len(w2)))
+
+    wins = []
+    for f in files:
+        wins += dialogue_windows(f, _words_for(str(f), wmap))
+    total_beats = max(16, int(round(target / period)))
+    dlg_budget = int(total_beats * 0.6)
     chosen = []
     for w in sorted(wins, key=lambda x: -x["score"]):
         if any(overlap(w["text"], c["text"]) >= 0.40 for c in chosen):
             continue
+        db = int(math.ceil((w["e"] - w["s"] + 0.95) / period))
+        if sum(c["beats"] for c in chosen) + db > dlg_budget:
+            continue
+        w["beats"] = db
         chosen.append(w)
-        if len(chosen) >= 2:
+        if len(chosen) >= 4:
             break
-    # Dialogue 1: 3.5-8.5, Dialogue 2: prefer 3.5-5.5
-    if len(chosen) >= 2 and (chosen[1]["e"] - chosen[1]["s"]) > 5.5:
-        chosen[1]["e"] = chosen[1]["s"] + 5.0
-    total_beats = max(16, int(round(target / period)))
-    segs = []
-    # simple alternating structure
+    chosen.sort(key=lambda c: (c["src"], c["s"]))
+    for c in chosen:
+        st = max(0.0, c["s"] - 0.25)
+        used[c["src"]].append((st, st + c["beats"] * period + 0.3))
+
+    rr = [0]
+
+    def take(beats: int):
+        need = beats * period + 0.4
+        for k in range(len(files)):
+            src = str(files[(rr[0] + k) % len(files)])
+            t = 1.0
+            while t + need <= durs[src] - 0.3:
+                if free(src, t, t + need):
+                    used[src].append((t, t + need))
+                    rr[0] += 1
+                    return src, t
+                t += 0.5
+        return None
+
+    segs: list[Seg] = []
     beat_left = total_beats
-    for i, c in enumerate(chosen[:2]):
-        db = int(math.ceil((c["e"] - c["s"] + 0.95) / period))
-        segs.append(Seg("dialogue", c["src"], max(0.0, c["s"] - 0.25), db))
-        beat_left -= db
-        mb = min(8, beat_left // 2)
-        if mb > 0 and files:
-            segs.append(Seg("montage", str(files[i % len(files)]), 1.0, mb, zoom=1.04))
-            beat_left -= mb
-    while beat_left > 0 and files:
-        b = min(4, beat_left)
-        segs.append(Seg("montage", str(files[0]), 2.0, b, zoom=1.04))
+    # 2s hook: open on the strongest montage shot
+    first = take(2)
+    if first:
+        segs.append(Seg("montage", first[0], first[1], 2, zoom=1.06))
+        beat_left -= 2
+    for c in chosen:
+        if beat_left <= 0:
+            break
+        segs.append(Seg("dialogue", c["src"], max(0.0, c["s"] - 0.25), c["beats"]))
+        beat_left -= c["beats"]
+        mb = min(4, beat_left)
+        if mb > 0:
+            t = take(mb)
+            if t:
+                segs.append(Seg("montage", t[0], t[1], mb, zoom=1.04))
+                beat_left -= mb
+    while beat_left > 0:
+        b = min(3, beat_left)
+        t = take(b)
+        if not t:
+            b = 1
+            t = take(b)
+            if not t:
+                raise RuntimeError("not enough unique footage — refusing to repeat/loop shots")
+        segs.append(Seg("montage", t[0], t[1], b, zoom=1.04))
         beat_left -= b
+    print(f"PLAN: {len(segs)} shots, {len(chosen)} dialogue windows, "
+          f"sources={[(Path(f).name, round(durs[str(f)], 1)) for f in files]}")
     return segs
 
 

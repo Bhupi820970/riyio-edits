@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Sync missing songs from catalog to songs-bank GitHub Release.
+"""Sync missing catalog songs into the songs-bank GitHub Release.
 
-Primary: RapidAPI YouTube (YT_RAPIDAPI_KEY_1..4 rotation).
-Fallback: yt-dlp if RapidAPI fails.
-Does NOT commit the mp3s into the git repo — only uploads to the release.
+Downloads MP3s via RapidAPI (youtube-info-download-api) with automatic key
+rotation across YT_RAPIDAPI_KEY_1..4. Does NOT commit mp3s into git — only
+uploads to the release. Key values are never printed.
 """
 from __future__ import annotations
 
@@ -13,16 +13,20 @@ import subprocess
 import sys
 from pathlib import Path
 
-# Make pipeline_lib importable when script is run from repo root
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from pipeline_lib.sourcing import (  # noqa: E402
+    AllKeysExhausted, RapidAPIError, rapid_available, rapid_download, rapid_search,
+)
 
 CATALOG = Path("config/songs_catalog.json")
 REPO = os.environ.get("REPO", "Bhupi820970/riyio-edits")
 RELEASE = "songs-bank"
+BAD = ("live", "cover", "remix", "karaoke", "reaction", "8d", "slowed", "sped up",
+       "nightcore", "instrumental version", "1 hour", "10 hours", "loop")
 
 
 def run(cmd, timeout=300):
-    print("+", " ".join(cmd[:8]), "...")
+    print("+", " ".join(cmd[:6]), "...")
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     if r.returncode != 0:
         print((r.stderr or "")[-400:])
@@ -34,74 +38,81 @@ def existing_assets() -> set[str]:
     if r.returncode != 0:
         return set()
     try:
-        data = json.loads(r.stdout)
-        return {a["name"] for a in data.get("assets", [])}
+        return {a["name"] for a in json.loads(r.stdout).get("assets", [])}
     except Exception:
         return set()
 
 
-def download_one(title: str, artist: str, out: Path) -> bool:
-    query = f"{title} {artist}"
-    # Try RapidAPI first
-    try:
-        from pipeline_lib.rapidapi_yt import yt_client
-        dl = yt_client.download(f"https://www.youtube.com/results?search_query={query.replace(' ', '+')}", "mp3")
-        if dl:
-            r = subprocess.run(["curl", "-fsSL", "-o", str(out), dl], capture_output=True)
-            if r.returncode == 0 and out.exists() and out.stat().st_size > 50_000:
-                return True
-    except Exception as e:
-        print("RapidAPI song fail:", e)
-
-    # Fallback yt-dlp
-    cmd = [
-        "yt-dlp", "--no-playlist",
-        "--js-runtimes", "deno",
-        "--extractor-args", "youtube:player_client=tv,mweb",
-        "-f", "ba/b",
-        "-x", "--audio-format", "mp3", "--audio-quality", "192K",
-        "-o", str(out),
-        f"ytsearch1:{query}",
-    ]
-    cookies = os.environ.get("YT_COOKIES", "").strip()
-    if cookies:
-        try:
-            from pipeline_lib.sourcing import ytdlp_cookie_args
-            cmd += ytdlp_cookie_args()
-        except Exception:
-            pass
-    r = run(cmd, timeout=180)
-    return out.exists() and out.stat().st_size > 50_000
+def pick_video(title: str, artist: str) -> dict | None:
+    q = f"{title} {artist} official audio"
+    res = rapid_search(q)
+    good = []
+    for v in res:
+        t = v["title"].lower()
+        if not (90 <= (v["duration"] or 0) <= 600):
+            continue
+        if any(b in t for b in BAD) and not any(b in title.lower() for b in BAD):
+            continue
+        score = 0
+        if title.lower().split("(")[0].strip()[:12] in t:
+            score += 3
+        if artist.lower().split(",")[0].split("&")[0].strip()[:10] in (t + " " + v["channel"].lower()):
+            score += 2
+        if "official" in t or "topic" in v["channel"].lower():
+            score += 1
+        good.append((score, v))
+    if not good:
+        return None
+    good.sort(key=lambda x: -x[0])
+    return good[0][1]
 
 
 def main():
+    if not rapid_available():
+        print("ERROR: no YT_RAPIDAPI_KEY_1..4 in env")
+        sys.exit(1)
     catalog = json.loads(CATALOG.read_text())["songs"]
-    have = existing_assets()
-    print(f"songs-bank currently has {len(have)} assets")
-
-    run(["gh", "release", "view", RELEASE, "--repo", REPO], timeout=20)
     if run(["gh", "release", "view", RELEASE, "--repo", REPO], timeout=20).returncode != 0:
         run(["gh", "release", "create", RELEASE, "--repo", REPO,
              "--title", "RIYIO songs-bank", "--notes", "Mood-matched songs for the pipeline"], timeout=30)
-
-    ok = 0
+    have = existing_assets()
+    print(f"songs-bank currently has {len(have)} assets")
+    limit = int(os.environ.get("SYNC_LIMIT", "0") or 0)
+    ok = fail = 0
     for s in catalog:
         name = s["file"]
         if name in have:
-            print("skip", name)
             continue
+        if limit and ok >= limit:
+            break
         tmp = Path("/tmp") / name
         print(f"fetching {name} — {s['title']} – {s['artist']}")
-        if download_one(s["title"], s["artist"], tmp):
-            r = run(["gh", "release", "upload", RELEASE, str(tmp),
-                     "--repo", REPO, "--clobber"], timeout=120)
-            if r.returncode == 0:
-                ok += 1
-                print("uploaded", name)
-            tmp.unlink(missing_ok=True)
+        try:
+            v = pick_video(s["title"], s["artist"])
+            if not v:
+                print("  no suitable search result")
+                fail += 1
+                continue
+            print(f"  -> {v['title'][:70]} ({int(v['duration'])}s)")
+            rapid_download(v["url"], "mp3", tmp, max_minutes=10)
+        except AllKeysExhausted as e:
+            print("STOP:", e)
+            break
+        except RapidAPIError as e:
+            print("  FAILED:", str(e)[:200])
+            fail += 1
+            continue
+        r = run(["gh", "release", "upload", RELEASE, str(tmp), "--repo", REPO, "--clobber"], timeout=180)
+        if r.returncode == 0:
+            ok += 1
+            print("  uploaded", name)
         else:
-            print("FAILED", name)
-    print(f"DONE — uploaded {ok} new songs")
+            fail += 1
+        tmp.unlink(missing_ok=True)
+    total = len(existing_assets())
+    print(f"DONE — uploaded {ok} new songs, {fail} failed, songs-bank total = {total}")
+    if total == 0:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
