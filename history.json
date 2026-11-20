@@ -3,11 +3,13 @@
     "movies_1_2794",
     "movies_2_7631",
     "anime_3_1114",
-    "series_4_8585"
+    "series_4_8585",
+    "racing_7_2436"
   ],
   "source_ids": [],
   "used_patterns": [
-    "P01"
+    "P01",
+    "P02"
   ],
   "songs": []
 }
