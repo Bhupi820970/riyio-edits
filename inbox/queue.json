@@ -1,1 +1,392 @@
-[]
+[
+  {
+    "id": "movies_1_2794",
+    "genre": "movies",
+    "topic": "blockbuster fight 4330",
+    "search_queries": [
+      "blockbuster fight 4330",
+      "blockbuster fight 4330 official",
+      "blockbuster fight 4330 full scene"
+    ],
+    "song_query": "epic orchestral",
+    "style_mode": "dual",
+    "status": "done"
+  },
+  {
+    "id": "movies_2_7631",
+    "genre": "movies",
+    "topic": "blockbuster fight 7593",
+    "search_queries": [
+      "blockbuster fight 7593",
+      "blockbuster fight 7593 official",
+      "blockbuster fight 7593 full scene"
+    ],
+    "song_query": "epic orchestral",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "anime_3_1114",
+    "genre": "anime",
+    "topic": "anime best moment 146",
+    "search_queries": [
+      "anime best moment 146",
+      "anime best moment 146 official",
+      "anime best moment 146 full scene"
+    ],
+    "song_query": "j-pop instrumental",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "series_4_8585",
+    "genre": "series",
+    "topic": "tv series emotional scene 790",
+    "search_queries": [
+      "tv series emotional scene 790",
+      "tv series emotional scene 790 official",
+      "tv series emotional scene 790 full scene"
+    ],
+    "song_query": "dramatic score",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "movies_5_9777",
+    "genre": "movies",
+    "topic": "blockbuster fight 9915",
+    "search_queries": [
+      "blockbuster fight 9915",
+      "blockbuster fight 9915 official",
+      "blockbuster fight 9915 full scene"
+    ],
+    "song_query": "epic orchestral",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "sports_6_9636",
+    "genre": "sports",
+    "topic": "sports highlight interview 2913",
+    "search_queries": [
+      "sports highlight interview 2913",
+      "sports highlight interview 2913 official",
+      "sports highlight interview 2913 full scene"
+    ],
+    "song_query": "hype anthem",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "racing_7_2436",
+    "genre": "racing",
+    "topic": "f1 race highlight 9107",
+    "search_queries": [
+      "f1 race highlight 9107",
+      "f1 race highlight 9107 official",
+      "f1 race highlight 9107 full scene"
+    ],
+    "song_query": "high energy electronic",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "movies_8_7385",
+    "genre": "movies",
+    "topic": "epic movie scene 6421",
+    "search_queries": [
+      "epic movie scene 6421",
+      "epic movie scene 6421 official",
+      "epic movie scene 6421 full scene"
+    ],
+    "song_query": "epic orchestral",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "gaming_9_3255",
+    "genre": "gaming",
+    "topic": "epic gaming moment 736",
+    "search_queries": [
+      "epic gaming moment 736",
+      "epic gaming moment 736 official",
+      "epic gaming moment 736 full scene"
+    ],
+    "song_query": "trap beat",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "movies_10_6291",
+    "genre": "movies",
+    "topic": "blockbuster fight 5388",
+    "search_queries": [
+      "blockbuster fight 5388",
+      "blockbuster fight 5388 official",
+      "blockbuster fight 5388 full scene"
+    ],
+    "song_query": "epic orchestral",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "movies_11_1538",
+    "genre": "movies",
+    "topic": "blockbuster fight 3597",
+    "search_queries": [
+      "blockbuster fight 3597",
+      "blockbuster fight 3597 official",
+      "blockbuster fight 3597 full scene"
+    ],
+    "song_query": "epic orchestral",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "romance_12_1173",
+    "genre": "romance",
+    "topic": "heartfelt couple moment 3544",
+    "search_queries": [
+      "heartfelt couple moment 3544",
+      "heartfelt couple moment 3544 official",
+      "heartfelt couple moment 3544 full scene"
+    ],
+    "song_query": "soft piano",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "movies_13_7841",
+    "genre": "movies",
+    "topic": "cinematic dialogue 2303",
+    "search_queries": [
+      "cinematic dialogue 2303",
+      "cinematic dialogue 2303 official",
+      "cinematic dialogue 2303 full scene"
+    ],
+    "song_query": "epic orchestral",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "series_14_3063",
+    "genre": "series",
+    "topic": "tv show best dialogue 2441",
+    "search_queries": [
+      "tv show best dialogue 2441",
+      "tv show best dialogue 2441 official",
+      "tv show best dialogue 2441 full scene"
+    ],
+    "song_query": "dramatic score",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "romance_15_2097",
+    "genre": "romance",
+    "topic": "heartfelt couple moment 9789",
+    "search_queries": [
+      "heartfelt couple moment 9789",
+      "heartfelt couple moment 9789 official",
+      "heartfelt couple moment 9789 full scene"
+    ],
+    "song_query": "soft piano",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "gaming_16_4817",
+    "genre": "gaming",
+    "topic": "epic gaming moment 4911",
+    "search_queries": [
+      "epic gaming moment 4911",
+      "epic gaming moment 4911 official",
+      "epic gaming moment 4911 full scene"
+    ],
+    "song_query": "trap beat",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "sports_17_1313",
+    "genre": "sports",
+    "topic": "athlete press conference 6015",
+    "search_queries": [
+      "athlete press conference 6015",
+      "athlete press conference 6015 official",
+      "athlete press conference 6015 full scene"
+    ],
+    "song_query": "hype anthem",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "racing_18_5087",
+    "genre": "racing",
+    "topic": "racing cinematic 1649",
+    "search_queries": [
+      "racing cinematic 1649",
+      "racing cinematic 1649 official",
+      "racing cinematic 1649 full scene"
+    ],
+    "song_query": "high energy electronic",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "movies_19_4822",
+    "genre": "movies",
+    "topic": "cinematic dialogue 9705",
+    "search_queries": [
+      "cinematic dialogue 9705",
+      "cinematic dialogue 9705 official",
+      "cinematic dialogue 9705 full scene"
+    ],
+    "song_query": "epic orchestral",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "motivation_20_1574",
+    "genre": "motivation",
+    "topic": "underdog story scene 8864",
+    "search_queries": [
+      "underdog story scene 8864",
+      "underdog story scene 8864 official",
+      "underdog story scene 8864 full scene"
+    ],
+    "song_query": "uplifting cinematic",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "sports_21_9243",
+    "genre": "sports",
+    "topic": "athlete press conference 1830",
+    "search_queries": [
+      "athlete press conference 1830",
+      "athlete press conference 1830 official",
+      "athlete press conference 1830 full scene"
+    ],
+    "song_query": "hype anthem",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "motivation_22_7860",
+    "genre": "motivation",
+    "topic": "motivational speech scene 8596",
+    "search_queries": [
+      "motivational speech scene 8596",
+      "motivational speech scene 8596 official",
+      "motivational speech scene 8596 full scene"
+    ],
+    "song_query": "uplifting cinematic",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "motivation_23_5243",
+    "genre": "motivation",
+    "topic": "underdog story scene 7563",
+    "search_queries": [
+      "underdog story scene 7563",
+      "underdog story scene 7563 official",
+      "underdog story scene 7563 full scene"
+    ],
+    "song_query": "uplifting cinematic",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "series_24_9363",
+    "genre": "series",
+    "topic": "tv series emotional scene 2704",
+    "search_queries": [
+      "tv series emotional scene 2704",
+      "tv series emotional scene 2704 official",
+      "tv series emotional scene 2704 full scene"
+    ],
+    "song_query": "dramatic score",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "motivation_25_6471",
+    "genre": "motivation",
+    "topic": "inspirational movie quote 2128",
+    "search_queries": [
+      "inspirational movie quote 2128",
+      "inspirational movie quote 2128 official",
+      "inspirational movie quote 2128 full scene"
+    ],
+    "song_query": "uplifting cinematic",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "sports_26_1329",
+    "genre": "sports",
+    "topic": "championship moment 9714",
+    "search_queries": [
+      "championship moment 9714",
+      "championship moment 9714 official",
+      "championship moment 9714 full scene"
+    ],
+    "song_query": "hype anthem",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "sports_27_8500",
+    "genre": "sports",
+    "topic": "athlete press conference 3477",
+    "search_queries": [
+      "athlete press conference 3477",
+      "athlete press conference 3477 official",
+      "athlete press conference 3477 full scene"
+    ],
+    "song_query": "hype anthem",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "series_28_4782",
+    "genre": "series",
+    "topic": "tv series emotional scene 8444",
+    "search_queries": [
+      "tv series emotional scene 8444",
+      "tv series emotional scene 8444 official",
+      "tv series emotional scene 8444 full scene"
+    ],
+    "song_query": "dramatic score",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "movies_29_8308",
+    "genre": "movies",
+    "topic": "cinematic dialogue 4304",
+    "search_queries": [
+      "cinematic dialogue 4304",
+      "cinematic dialogue 4304 official",
+      "cinematic dialogue 4304 full scene"
+    ],
+    "song_query": "epic orchestral",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "motivation_30_6095",
+    "genre": "motivation",
+    "topic": "motivational speech scene 542",
+    "search_queries": [
+      "motivational speech scene 542",
+      "motivational speech scene 542 official",
+      "motivational speech scene 542 full scene"
+    ],
+    "song_query": "uplifting cinematic",
+    "style_mode": "dual",
+    "status": "pending"
+  }
+]
