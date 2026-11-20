@@ -10,6 +10,7 @@
     {"file": "dark_8.mp3", "mood": "dark", "title": "Gangsta's Paradise", "artist": "Coolio"},
     {"file": "dark_9.mp3", "mood": "dark", "title": "Red Right Hand", "artist": "Nick Cave & The Bad Seeds"},
     {"file": "dark_10.mp3", "mood": "dark", "title": "Do I Wanna Know?", "artist": "Arctic Monkeys"},
+
     {"file": "epic_1.mp3", "mood": "epic", "title": "Little Dark Age", "artist": "MGMT"},
     {"file": "epic_2.mp3", "mood": "epic", "title": "Solitude (Felsmann + Tiley)", "artist": "M83"},
     {"file": "epic_3.mp3", "mood": "epic", "title": "We Are The People", "artist": "Empire of the Sun"},
@@ -20,6 +21,7 @@
     {"file": "epic_8.mp3", "mood": "epic", "title": "Viva La Vida", "artist": "Coldplay"},
     {"file": "epic_9.mp3", "mood": "epic", "title": "Skyfall", "artist": "Adele"},
     {"file": "epic_10.mp3", "mood": "epic", "title": "Way Down We Go", "artist": "KALEO"},
+
     {"file": "emotional_1.mp3", "mood": "emotional", "title": "Experience", "artist": "Ludovico Einaudi"},
     {"file": "emotional_2.mp3", "mood": "emotional", "title": "Space Song", "artist": "Beach House"},
     {"file": "emotional_3.mp3", "mood": "emotional", "title": "snowfall", "artist": "Øneheart x reidenshi"},
@@ -30,6 +32,7 @@
     {"file": "emotional_8.mp3", "mood": "emotional", "title": "Where's My Love", "artist": "SYML"},
     {"file": "emotional_9.mp3", "mood": "emotional", "title": "Je te laisserai des mots", "artist": "Patrick Watson"},
     {"file": "emotional_10.mp3", "mood": "emotional", "title": "Daylight", "artist": "David Kushner"},
+
     {"file": "aggressive_1.mp3", "mood": "aggressive", "title": "Kerosene", "artist": "Crystal Castles"},
     {"file": "aggressive_2.mp3", "mood": "aggressive", "title": "METAMORPHOSIS", "artist": "INTERWORLD"},
     {"file": "aggressive_3.mp3", "mood": "aggressive", "title": "Close Eyes", "artist": "DVRST"},
@@ -40,6 +43,7 @@
     {"file": "aggressive_8.mp3", "mood": "aggressive", "title": "Override", "artist": "KSLV Noh"},
     {"file": "aggressive_9.mp3", "mood": "aggressive", "title": "GigaChad Theme (Phonk House)", "artist": "g3ox_em"},
     {"file": "aggressive_10.mp3", "mood": "aggressive", "title": "Montagem Mysterious Game", "artist": "LXNGVX"},
+
     {"file": "hype_1.mp3", "mood": "hype", "title": "FE!N", "artist": "Travis Scott"},
     {"file": "hype_2.mp3", "mood": "hype", "title": "Praise God", "artist": "Kanye West"},
     {"file": "hype_3.mp3", "mood": "hype", "title": "Midnight City", "artist": "M83"},
@@ -50,6 +54,7 @@
     {"file": "hype_8.mp3", "mood": "hype", "title": "Mockingbird", "artist": "Eminem"},
     {"file": "hype_9.mp3", "mood": "hype", "title": "Till I Collapse", "artist": "Eminem"},
     {"file": "hype_10.mp3", "mood": "hype", "title": "Band4Band", "artist": "Central Cee & Lil Baby"},
+
     {"file": "romance_1.mp3", "mood": "romance", "title": "Apocalypse", "artist": "Cigarettes After Sex"},
     {"file": "romance_2.mp3", "mood": "romance", "title": "The Night We Met", "artist": "Lord Huron"},
     {"file": "romance_3.mp3", "mood": "romance", "title": "My Love Mine All Mine", "artist": "Mitski"},
