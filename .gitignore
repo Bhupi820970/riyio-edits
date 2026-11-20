@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.cache/
+*.mp4
+*.wav
+*.png
+.env
+fonts/*.ttf
+!fonts/.gitkeep

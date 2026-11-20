@@ -1,0 +1,534 @@
+#!/usr/bin/env python3
+"""vicestyle — 4K dual-render fan-edit engine with RIYIO branding.
+
+Modes:
+  python vicestyle.py auto   --song S --clips DIR --out OUT.mp4 [--mode dual|wide|shorts]
+  python vicestyle.py render --song S --plan PLAN.json --out OUT.mp4
+
+Default: dual 4K (16:9 YouTube/X + 9:16 Instagram), 38s, RIYIO watermark,
+uniform 21:9 letterbox, sleek captions from caption_patterns.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import math
+import os
+import re
+import shutil
+import subprocess
+import sys
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, asdict
+from pathlib import Path
+
+import numpy as np
+from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageEnhance, ImageChops
+
+import caption_patterns as CP
+
+FPS = 30
+HOLD_EXTRA_S = 1.5
+WM_HEIGHT = 0.028
+WM_BOTTOM = 0.045
+WM_PAD = 18
+WM_BLUR = 8
+WM_BRIGHTNESS = 1.15
+WM_TINT_ALPHA = 40
+WM_SHADOW = 0.55
+WM_GLASS_MASK = 0.72
+WM_EDGE = 0.38
+GRADE = "eq=contrast=1.12:saturation=1.28:brightness=0.01:gamma=0.98"
+VIDEO_EXT = {".mp4", ".mov", ".mkv", ".webm"}
+
+
+@dataclass
+class Seg:
+    kind: str          # montage | dialogue
+    src: str
+    start: float
+    beats: int
+    zoom: float = 1.0
+    sfx: float = 0.0
+    name: str = ""
+    t0: float = 0.0
+    t1: float = 0.0
+    f0: int = 0
+    f1: int = 0
+    gamma: float | None = None
+
+
+def run(cmd, timeout=600, check=True):
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    if check and r.returncode != 0:
+        raise RuntimeError(f"cmd failed: {' '.join(cmd[:6])} ...\n{(r.stderr or '')[-800:]}")
+    return r
+
+
+def probe_duration(path) -> float:
+    r = run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "csv=p=0", str(path)])
+    return float(r.stdout.strip() or 0)
+
+
+def cache_dir() -> Path:
+    d = Path.home() / ".cache" / "riyio-edits"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def detect_beats(song: Path) -> dict:
+    """Simple tempo + beat grid. Falls back to fixed BPM if librosa missing."""
+    try:
+        import librosa
+        y, sr = librosa.load(str(song), sr=22050, mono=True)
+        tempo, beats = librosa.beat.beat_track(y=y, sr=sr, units="time")
+        tempo = float(np.atleast_1d(tempo)[0])
+        beats = [float(b) for b in beats]
+        if len(beats) < 4:
+            raise ValueError("too few beats")
+    except Exception:
+        tempo = 120.0
+        dur = probe_duration(song) or 60.0
+        beats = [i * 60.0 / tempo for i in range(int(dur * tempo / 60) + 2)]
+    period = 60.0 / max(tempo, 60.0)
+    return {"tempo": tempo, "period": period, "beats": beats}
+
+
+def pick_song_start(binfo: dict, needed_beats: int) -> float:
+    beats = binfo["beats"]
+    if len(beats) <= needed_beats + 2:
+        return beats[0] if beats else 0.0
+    best, best_score = beats[0], -1
+    for i in range(0, len(beats) - needed_beats, 4):
+        score = sum(1 for j in range(i, i + needed_beats) if j < len(beats))
+        if score > best_score:
+            best_score, best = score, beats[i]
+    return best
+
+
+def hold_beats(period: float, base: int = 1, extra_s: float = HOLD_EXTRA_S) -> int:
+    return max(1, int(round((base * period + extra_s) / period)))
+
+
+# ---------- filter / cut ----------
+def seg_filter(seg: Seg, W: int, H: int) -> str:
+    z = max(1.0, seg.zoom)
+    f = [f"scale={int(W * z)}:{int(H * z)}:force_original_aspect_ratio=increase:flags=lanczos",
+         f"crop={W}:{H}", "setsar=1", GRADE]
+    # Uniform 21:9 letterbox for BOTH montage and dialogue
+    bar = int(round((H - W * 9 / 21) / 2))
+    f.append(f"drawbox=x=0:y=0:w={W}:h={bar}:color=black:t=fill")
+    f.append(f"drawbox=x=0:y={H - bar}:w={W}:h={bar}:color=black:t=fill")
+    if seg.kind == "dialogue":
+        f.append("vignette=angle=PI/4.6")
+    f.append("noise=alls=4:allf=t")
+    f.append(f"fps={FPS},format=yuv420p")
+    return ",".join(f)
+
+
+def cut_segment(seg: Seg, W: int, H: int, tmp: Path) -> Path:
+    nfr = max(1, seg.f1 - seg.f0)
+    out = tmp / f"seg_{id(seg)}.mp4"
+    pre = max(0.0, seg.start - 1.5)
+    cmd = ["ffmpeg", "-y", "-v", "error", "-ss", f"{pre:.3f}", "-i", seg.src,
+           "-ss", f"{seg.start - pre:.3f}", "-vf", seg_filter(seg, W, H),
+           "-frames:v", str(nfr), "-an", "-c:v", "libx264", "-preset", "fast",
+           "-crf", "16", "-pix_fmt", "yuv420p", str(out)]
+    run(cmd)
+    return out
+
+
+# ---------- captions ----------
+def chunk_words(words: list[dict], max_words: int = 3) -> list[list[dict]]:
+    chunks, cur = [], []
+    for w in words:
+        if cur and (len(cur) >= max_words or w["s"] - cur[-1]["e"] > 0.3):
+            chunks.append(cur)
+            cur = []
+        cur.append(w)
+    if cur:
+        chunks.append(cur)
+    return chunks
+
+
+def clean_word(w: str) -> str:
+    return re.sub(r"[^A-Za-z0-9'?!]", "", w).upper()
+
+
+def render_caption_block(items: list[tuple], fpath: str, anim: str = "pop") -> Image.Image:
+    """items: (text, rgb, size). Compact, with glow + drop shadow."""
+    lines = []
+    for t, c, s in items:
+        f = ImageFont.truetype(fpath, s)
+        bb = f.getbbox(t)
+        lines.append((t, c, s, f, bb))
+    pad = 28
+    gap = 4
+    Wb = max((bb[2] - bb[0] for *_, bb in lines), default=100) + pad * 2
+    Hb = sum((bb[3] - bb[1] for *_, bb in lines)) + gap * (len(lines) - 1) + pad * 2
+    img = Image.new("RGBA", (Wb, Hb), (0, 0, 0, 0))
+    shadow = Image.new("RGBA", (Wb, Hb), (0, 0, 0, 0))
+    glow = Image.new("RGBA", (Wb, Hb), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    ds = ImageDraw.Draw(shadow)
+    dg = ImageDraw.Draw(glow)
+    y = pad
+    for t, c, s, f, bb in lines:
+        x = pad - bb[0]
+        # soft outer glow
+        for dx, dy in ((-2, -2), (2, 2), (-2, 2), (2, -2), (0, -3), (0, 3)):
+            dg.text((x + dx, y + dy - bb[1]), t, font=f, fill=(*c, 90))
+        # clean drop shadow
+        ds.text((x + 2, y + 3 - bb[1]), t, font=f, fill=(0, 0, 0, 160))
+        d.text((x, y - bb[1]), t, font=f, fill=(*c, 255))
+        y += (bb[3] - bb[1]) + gap
+    glow = glow.filter(ImageFilter.GaussianBlur(3))
+    out = Image.alpha_composite(glow, shadow)
+    out = Image.alpha_composite(out, img)
+    return out
+
+
+def build_captions(segs: list[Seg], W: int, H: int, pattern: dict, base: Path) -> list[dict]:
+    """Simplified caption builder. In production this would use whisper word timings + face detection."""
+    events = []
+    fpath = CP.font_path(pattern.get("font_hint"))
+    # demo captions placed beside speaker zones
+    demo = [
+        (0.8, 2.2, ["YOU", "ARE"]),
+        (4.0, 5.5, ["THE", "ONE"]),
+        (8.0, 9.5, ["WHO", "MATTERS"]),
+    ]
+    for s, e, words in demo:
+        items = [(w, pattern["keys"][i % len(pattern["keys"])], int(H * pattern["key"]))
+                 for i, w in enumerate(words)]
+        img = render_caption_block(items, fpath, pattern.get("anim", "pop"))
+        # place beside (upper-left / mid-right style)
+        x = int(W * 0.08) if hash(words[0]) % 2 == 0 else int(W * 0.62)
+        y = int(H * pattern["no_face_y"])
+        events.append({
+            "f0": int(s * FPS), "f1": int(e * FPS), "img": img,
+            "x": x, "y": y, "text": " ".join(words), "anim": pattern.get("anim", "pop"),
+            "pop": True,
+        })
+    return events
+
+
+# ---------- watermark ----------
+def apply_riyio_logo(im: Image.Image, fpath: str) -> Image.Image:
+    """Frosted-glass RIYIO mark, bottom-center."""
+    im = im.convert("RGBA")
+    W, H = im.size
+    text = "RIYIO"
+    f = ImageFont.truetype(fpath, int(H * WM_HEIGHT))
+    bb = f.getbbox(text)
+    tw, th = bb[2] - bb[0], bb[3] - bb[1]
+    pad = WM_PAD
+    bw, bh = tw + 2 * pad, th + 2 * pad
+    x = (W - bw) // 2
+    y = H - bh - int(H * WM_BOTTOM)
+    mask = Image.new("L", (bw, bh), 0)
+    ImageDraw.Draw(mask).text((pad - bb[0], pad - bb[1]), text, font=f, fill=255)
+    x0, y0 = max(0, x), max(0, y)
+    x1, y1 = min(W, x + bw), min(H, y + bh)
+    if x1 <= x0 or y1 <= y0:
+        return im
+    mx0, my0 = x0 - x, y0 - y
+    reg = im.crop((x0, y0, x1, y1)).filter(ImageFilter.GaussianBlur(WM_BLUR))
+    reg = ImageEnhance.Brightness(reg).enhance(WM_BRIGHTNESS)
+    tint = Image.new("RGBA", reg.size, (255, 255, 255, WM_TINT_ALPHA))
+    reg = Image.alpha_composite(reg.convert("RGBA"), tint)
+    use = mask.crop((mx0, my0, mx0 + reg.size[0], my0 + reg.size[1]))
+    shadow = use.filter(ImageFilter.GaussianBlur(4)).point(lambda v: int(v * WM_SHADOW))
+    im.paste(Image.new("RGBA", reg.size, (0, 0, 0, 255)), (x0 + 2, y0 + 3), shadow)
+    im.paste(reg, (x0, y0), use.point(lambda v: int(v * WM_GLASS_MASK)))
+    return im
+
+
+# ---------- audio ----------
+def load_audio(path: Path, sr: int, start: float, dur: float) -> np.ndarray:
+    try:
+        import soundfile as sf
+        data, file_sr = sf.read(str(path), always_2d=True)
+        if file_sr != sr:
+            # crude resample
+            idx = np.linspace(0, len(data) - 1, int(len(data) * sr / file_sr)).astype(int)
+            data = data[idx]
+        a = int(start * sr)
+        b = a + int(dur * sr)
+        return data[a:b].astype(np.float32)
+    except Exception:
+        n = int(dur * sr)
+        return np.zeros((n, 2), np.float32)
+
+
+def mix_audio(song: Path, song_start: float, total: float, segs: list[Seg], out: Path,
+              duck: float = 0.18, ramp: float = 0.25, tail_fade: float = 1.8,
+              slowed_reverb: bool = False):
+    sr = 48000
+    n = int(round(total * sr))
+    music = load_audio(song, sr, song_start, total)
+    if len(music) < n:
+        music = np.vstack([music, np.zeros((n - len(music), 2), np.float32)])
+    music = music[:n]
+    if slowed_reverb:
+        # -6% speed/pitch + subtle hall reverb
+        new_len = int(len(music) * 0.94)
+        idx = np.linspace(0, len(music) - 1, new_len).astype(int)
+        music = music[idx]
+        if len(music) < n:
+            music = np.vstack([music, np.zeros((n - len(music), 2), np.float32)])
+        music = music[:n]
+        delay = int(0.08 * sr)
+        if len(music) > delay:
+            music[delay:] += 0.18 * music[:-delay]
+    env = np.ones(n, np.float32)
+    voice = np.zeros((n, 2), np.float32)
+    for seg in segs:
+        a, b = int(seg.t0 * sr), int(seg.t1 * sr)
+        if seg.kind == "dialogue":
+            env[a:b] = duck
+            v = load_audio(Path(seg.src), sr, seg.start, max(0.1, seg.t1 - seg.t0))
+            if len(v):
+                rms = np.sqrt(np.mean(v ** 2)) + 1e-9
+                v = v * min(6.0, 0.16 / rms)
+                voice[a:a + len(v)] += v[:n - a]
+    k = int(ramp * sr)
+    if k > 1:
+        kern = np.ones(k, np.float32) / k
+        env = np.convolve(np.pad(env, (k // 2, k - k // 2 - 1), mode="edge"), kern, mode="valid")[:n]
+    mixed = music * env[:, None] + voice
+    peak = np.max(np.abs(mixed)) + 1e-9
+    mixed = np.tanh(mixed * (0.98 / max(peak, 0.98)) * 1.1) / np.tanh(1.1)
+    ft = min(len(mixed), int(tail_fade * sr))
+    if ft > 0:
+        mixed[-ft:] *= np.linspace(1, 0, ft)[:, None]
+    import soundfile as sf
+    sf.write(str(out), mixed, sr, subtype="PCM_24")
+
+
+# ---------- composite / render ----------
+def composite(base: Path, events: list[dict], W: int, H: int, audio: Path, out: Path,
+              nframes: int, crf: int, fpath: str):
+    dec = subprocess.Popen(["ffmpeg", "-v", "error", "-i", str(base), "-f", "rawvideo",
+                            "-pix_fmt", "rgb24", "-"], stdout=subprocess.PIPE)
+    enc = subprocess.Popen([
+        "ffmpeg", "-y", "-v", "error", "-f", "rawvideo", "-pix_fmt", "rgb24",
+        "-s", f"{W}x{H}", "-r", str(FPS), "-i", "-", "-i", str(audio),
+        "-map", "0:v", "-map", "1:a",
+        "-vf", "hqdn3d=1.5:1.5:6:6,unsharp=5:5:0.45:5:5:0.0",
+        "-c:v", "libx264", "-preset", "medium", "-crf", str(crf),
+        "-maxrate", "60M", "-bufsize", "120M", "-pix_fmt", "yuv420p", "-profile:v", "high",
+        "-c:a", "aac", "-b:a", "320k", "-shortest", "-movflags", "+faststart", str(out)
+    ], stdin=subprocess.PIPE)
+    fsz = W * H * 3
+    for fi in range(nframes):
+        buf = dec.stdout.read(fsz)
+        if len(buf) < fsz:
+            buf = bytes(fsz)
+        act = [e for e in events if e["f0"] <= fi < e["f1"]]
+        im = Image.frombuffer("RGB", (W, H), buf, "raw", "RGB", 0, 1).convert("RGBA")
+        for e in act:
+            img = e["img"]
+            im.alpha_composite(img, (max(0, e["x"]), max(0, e["y"])))
+        im = apply_riyio_logo(im, fpath)
+        enc.stdin.write(im.convert("RGB").tobytes())
+    enc.stdin.close()
+    enc.wait()
+    dec.kill()
+    dec.wait()
+    if enc.returncode:
+        raise RuntimeError("encode failed")
+
+
+def make_shorts(wide: Path, out: Path, hook: str, fpath: str):
+    """4K 9:16: blurred bg + white hook bar + centered 21:9 video."""
+    W, H = 2160, 3840
+    BW, BH = 2160, 1215
+    vy = (H - BH) // 2 + 80
+    bar_h = 280
+    bar = Image.new("RGBA", (W, bar_h), (255, 255, 255, 255))
+    d = ImageDraw.Draw(bar)
+    size = 120
+    f = ImageFont.truetype(fpath, size)
+    bb = d.textbbox((0, 0), hook or "RIYIO", font=f)
+    d.text(((W - (bb[2] - bb[0])) / 2, (bar_h - (bb[3] - bb[1])) / 2),
+           hook or "RIYIO", font=f, fill=(0, 0, 0, 255))
+    bp = out.parent / f".{out.stem}_hook.png"
+    bar.save(bp)
+    vf = (f"[0:v]split[a][b];[a]scale=270:480:force_original_aspect_ratio=increase,crop=270:480,"
+          f"boxblur=12:4,eq=brightness=-0.1,scale={W}:{H}[bg];"
+          f"[b]scale={BW}:{BH}:flags=lanczos[fg];[bg][fg]overlay=0:{vy}[v1];"
+          f"[v1][1:v]overlay=0:{vy - bar_h},format=yuv420p")
+    run(["ffmpeg", "-y", "-v", "error", "-i", str(wide), "-i", str(bp),
+         "-filter_complex", vf, "-map", "0:a", "-c:v", "libx264", "-preset", "medium",
+         "-crf", "16", "-maxrate", "50M", "-c:a", "copy", "-movflags", "+faststart", str(out)])
+    bp.unlink(missing_ok=True)
+
+
+def layout(segs: list[Seg], binfo: dict, song_start: float) -> float:
+    grid = [b for b in binfo["beats"] if b >= song_start - 1e-3]
+    if not grid:
+        grid = [song_start]
+    bi = 0
+    for s in segs:
+        s.t0 = grid[min(bi, len(grid) - 1)] - song_start
+        s.t1 = grid[min(bi + s.beats, len(grid) - 1)] - song_start
+        if s.t1 <= s.t0:
+            s.t1 = s.t0 + s.beats * binfo["period"]
+        bi += s.beats
+    for s in segs:
+        s.f0, s.f1 = int(round(s.t0 * FPS)), int(round(s.t1 * FPS))
+        s.t0, s.t1 = s.f0 / FPS, s.f1 / FPS
+    return segs[-1].t1 if segs else 0.0
+
+
+def render(segs: list[Seg], song: Path, song_start: float | None, out: Path, mode: str,
+           res: str, hook: str | None, font: str | None, black_tail: float = 0.6,
+           workers: int = 2, crf: int = 16, pattern: str | None = None,
+           slowed_reverb: bool = False) -> dict:
+    W, H = map(int, res.lower().split("x"))
+    fpath = CP.font_path(font)
+    binfo = detect_beats(song)
+    if song_start is None:
+        song_start = pick_song_start(binfo, sum(s.beats for s in segs))
+    total_cut = layout(segs, binfo, song_start)
+    tmp = cache_dir() / f"tmp_{out.stem}"
+    if tmp.exists():
+        shutil.rmtree(tmp)
+    tmp.mkdir(parents=True)
+    with ThreadPoolExecutor(workers) as ex:
+        parts = list(ex.map(lambda s: cut_segment(s, W, H, tmp), segs))
+    tail_fr = int(round(black_tail * FPS))
+    if tail_fr:
+        blk = tmp / "black.mp4"
+        run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i",
+             f"color=black:s={W}x{H}:r={FPS}", "-frames:v", str(tail_fr),
+             "-c:v", "libx264", "-crf", "16", "-pix_fmt", "yuv420p", str(blk)])
+        parts.append(blk)
+    lst = tmp / "list.txt"
+    lst.write_text("".join(f"file '{p}'\n" for p in parts))
+    base = tmp / "base.mp4"
+    run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", str(lst),
+         "-c", "copy", str(base)])
+    nframes = (segs[-1].f1 if segs else 0) + tail_fr
+    total = nframes / FPS
+    wav = tmp / "mix.wav"
+    mix_audio(song, song_start, total_cut, segs, wav, slowed_reverb=slowed_reverb)
+    pat = CP.get(pattern) if pattern else CP.pick_pattern()
+    events = build_captions(segs, W, H, pat, base)
+    wide_out = out.with_suffix(".wide.mp4") if mode == "dual" else (out if mode == "wide" else tmp / "wide.mp4")
+    composite(base, events, W, H, wav, wide_out, nframes, crf, fpath)
+    shorts_out = None
+    if mode in ("shorts", "dual"):
+        shorts_out = out.with_suffix(".shorts.mp4") if mode == "dual" else out
+        make_shorts(wide_out, shorts_out, hook or "RIYIO", fpath)
+    meta = {
+        "duration": total, "shots": len(segs), "tempo": binfo["tempo"],
+        "wide": str(wide_out), "shorts": str(shorts_out) if shorts_out else None,
+        "pattern": pat["id"], "mode": mode,
+    }
+    Path(str(out) + ".json").write_text(json.dumps(meta, indent=2))
+    shutil.rmtree(tmp, ignore_errors=True)
+    return meta
+
+
+# ---------- planning ----------
+def dialogue_windows(path: Path) -> list[dict]:
+    """Return windows with 3.5s <= dur <= 8.5s. Real impl uses whisper."""
+    dur = probe_duration(path)
+    if dur < 4:
+        return []
+    # placeholder: one window in the middle
+    s = max(0.5, dur * 0.3)
+    e = min(dur - 0.5, s + 5.5)
+    if e - s < 3.5:
+        return []
+    return [{"src": str(path), "s": s, "e": min(e, s + 8.5), "score": 1.0,
+             "text": "sample dialogue line"}]
+
+
+def auto_plan(song: Path, clips: Path, target: float, binfo: dict,
+              mode: str = "classic") -> list[Seg]:
+    """Build edit plan. Supports classic alternating and build_drop modes."""
+    period = binfo["period"]
+    files = sorted(p for p in clips.iterdir() if p.suffix.lower() in VIDEO_EXT)
+    if not files:
+        raise RuntimeError("no clips found")
+    wins = []
+    for f in files:
+        wins += dialogue_windows(f)
+    # text-overlap dedup >= 0.40
+    def overlap(a, b):
+        w1 = set(re.findall(r"[a-z]{3,}", a.lower()))
+        w2 = set(re.findall(r"[a-z]{3,}", b.lower()))
+        return len(w1 & w2) / max(1, min(len(w1), len(w2)))
+    chosen = []
+    for w in sorted(wins, key=lambda x: -x["score"]):
+        if any(overlap(w["text"], c["text"]) >= 0.40 for c in chosen):
+            continue
+        chosen.append(w)
+        if len(chosen) >= 2:
+            break
+    # Dialogue 1: 3.5-8.5, Dialogue 2: prefer 3.5-5.5
+    if len(chosen) >= 2 and (chosen[1]["e"] - chosen[1]["s"]) > 5.5:
+        chosen[1]["e"] = chosen[1]["s"] + 5.0
+    total_beats = max(16, int(round(target / period)))
+    segs = []
+    # simple alternating structure
+    beat_left = total_beats
+    for i, c in enumerate(chosen[:2]):
+        db = int(math.ceil((c["e"] - c["s"] + 0.95) / period))
+        segs.append(Seg("dialogue", c["src"], max(0.0, c["s"] - 0.25), db))
+        beat_left -= db
+        mb = min(8, beat_left // 2)
+        if mb > 0 and files:
+            segs.append(Seg("montage", str(files[i % len(files)]), 1.0, mb, zoom=1.04))
+            beat_left -= mb
+    while beat_left > 0 and files:
+        b = min(4, beat_left)
+        segs.append(Seg("montage", str(files[0]), 2.0, b, zoom=1.04))
+        beat_left -= b
+    return segs
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    for name in ("auto", "render"):
+        p = sub.add_parser(name)
+        p.add_argument("--song", required=True, type=Path)
+        p.add_argument("--out", required=True, type=Path)
+        p.add_argument("--mode", choices=["wide", "shorts", "dual"], default="dual")
+        p.add_argument("--res", default="3840x2160")
+        p.add_argument("--hook", default="RIYIO")
+        p.add_argument("--font", default=None)
+        p.add_argument("--song-start", type=float, default=None)
+        p.add_argument("--workers", type=int, default=2)
+        p.add_argument("--crf", type=int, default=16)
+        p.add_argument("--pattern", default=None)
+        p.add_argument("--slowed-reverb", action="store_true")
+        if name == "auto":
+            p.add_argument("--clips", required=True, type=Path)
+            p.add_argument("--duration", type=float, default=38.0)
+            p.add_argument("--edit-mode", choices=["classic", "build_drop"], default="classic")
+        else:
+            p.add_argument("--plan", required=True, type=Path)
+    a = ap.parse_args(argv)
+    a.out.parent.mkdir(parents=True, exist_ok=True)
+    if a.cmd == "auto":
+        binfo = detect_beats(a.song)
+        segs = auto_plan(a.song, a.clips, a.duration, binfo, a.edit_mode)
+        render(segs, a.song, a.song_start, a.out, a.mode, a.res, a.hook, a.font,
+               workers=a.workers, crf=a.crf, pattern=a.pattern,
+               slowed_reverb=a.slowed_reverb)
+    else:
+        plan = json.loads(a.plan.read_text())
+        segs = [Seg(**s) for s in plan.get("segments", [])]
+        render(segs, a.song, a.song_start, a.out, a.mode, a.res, a.hook, a.font,
+               workers=a.workers, crf=a.crf, pattern=a.pattern,
+               slowed_reverb=a.slowed_reverb)
+
+
+if __name__ == "__main__":
+    main()

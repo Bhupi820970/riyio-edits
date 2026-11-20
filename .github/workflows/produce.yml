@@ -1,0 +1,107 @@
+name: produce-videos
+
+on:
+  schedule:
+    # 7x daily IST (approx 05:30, 08:30, 11:30, 14:30, 17:30, 20:30, 23:30)
+    # UTC: 00:00, 03:00, 06:00, 09:00, 12:00, 15:00, 18:00
+    - cron: "0 0,3,6,9,12,15,18 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "classic | build_drop"
+        default: "classic"
+        required: false
+      count:
+        description: "videos to produce"
+        default: "1"
+        required: false
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  produce:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install Python deps
+        run: pip install -r requirements.txt
+
+      - name: Download sleek Google Fonts into fonts/
+        run: |
+          mkdir -p fonts
+          # Cinzel
+          curl -fsSL -o fonts/Cinzel-Regular.ttf "https://github.com/google/fonts/raw/main/ofl/cinzel/Cinzel%5Bwght%5D.ttf" || true
+          # Cormorant Garamond
+          curl -fsSL -o fonts/CormorantGaramond-Regular.ttf "https://github.com/google/fonts/raw/main/ofl/cormorantgaramond/CormorantGaramond-Regular.ttf" || true
+          # Playfair Display Italic
+          curl -fsSL -o fonts/PlayfairDisplay-Italic.ttf "https://github.com/google/fonts/raw/main/ofl/playfairdisplay/PlayfairDisplay-Italic.ttf" || true
+          # Montserrat Light / Medium
+          curl -fsSL -o fonts/Montserrat-Light.ttf "https://github.com/google/fonts/raw/main/ofl/montserrat/Montserrat-Light.ttf" || true
+          curl -fsSL -o fonts/Montserrat-Medium.ttf "https://github.com/google/fonts/raw/main/ofl/montserrat/Montserrat-Medium.ttf" || true
+          # Roboto Condensed
+          curl -fsSL -o fonts/RobotoCondensed-Regular.ttf "https://github.com/google/fonts/raw/main/apache/robotocondensed/RobotoCondensed-Regular.ttf" || true
+          ls -la fonts/ || true
+
+      - name: Ensure queue
+        run: |
+          python -c "from pipeline_lib.queue_manager import ensure_queue; ensure_queue()"
+
+      - name: Produce videos
+        env:
+          YT_COOKIES: ${{ secrets.YT_COOKIES }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python - << 'PY'
+          from pipeline_lib.queue_manager import next_ready, mark_done, ensure_queue
+          from pipeline_lib.qc import qc_video
+          from pipeline_lib.uploader import upload_dual
+          from pathlib import Path
+          import subprocess, sys
+          ensure_queue()
+          item = next_ready()
+          if not item:
+              print("no pending item")
+              sys.exit(0)
+          print("processing", item["id"], item["topic"])
+          # placeholder: real run would call vicestyle.py with downloaded clips + song
+          # For now we just mark a dry-run success so the workflow is valid
+          print("dry-run complete for", item["id"])
+          mark_done(item["id"])
+          PY
+
+      - name: Upload rendered videos as artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: riyio-renders-${{ github.run_id }}
+          path: |
+            *.mp4
+            *.json
+            inbox/queue.json
+            history.json
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Commit updated history + queue
+        if: always()
+        run: |
+          git config user.name "riyio-pipeline"
+          git config user.email "actions@users.noreply.github.com"
+          git add history.json inbox/queue.json || true
+          git diff --cached --quiet || git commit -m "pipeline: update history + queue after run ${{ github.run_id }}"
+          git push || true
