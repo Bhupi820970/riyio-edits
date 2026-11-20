@@ -133,6 +133,9 @@ def publish_via_buffer(
             print("No Buffer organization found — skipping")
             return {"skipped": True, "reason": "no organization"}
         channels = list_channels(org_id)
+        print("Detected Buffer channels:")
+        for c in channels:
+            print(f"  - id={c.get('id')} service={c.get('service')} name={c.get('name') or c.get('displayName')}")
     except Exception as e:
         print(f"Buffer channel list failed: {e}")
         return {"skipped": True, "reason": str(e)}
