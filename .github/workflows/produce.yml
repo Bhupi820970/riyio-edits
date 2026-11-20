@@ -46,7 +46,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg curl unzip
-          # deno for yt-dlp YouTube extraction
           curl -fsSL https://deno.land/install.sh | sh
           echo "$HOME/.deno/bin" >> $GITHUB_PATH
           export PATH="$HOME/.deno/bin:$PATH"
@@ -58,14 +57,12 @@ jobs:
       - name: Download sleek Google Fonts into fonts/
         run: |
           mkdir -p fonts
-          # Dynamic fetch via Google Fonts CSS API (non-woff2 User-Agent forces .ttf)
           CSS=$(curl -fsSL -A "Mozilla/5.0" \
             "https://fonts.googleapis.com/css2?family=Cinzel:wght@600&family=Cormorant+Garamond:ital,wght@0,600;1,600&family=Playfair+Display:ital,wght@0,600;1,600&family=Montserrat:wght@300;500&family=Roboto+Condensed:wght@400;700")
           echo "$CSS" | grep -oE 'https://fonts.gstatic.com/[^)]+\.ttf' | sort -u > /tmp/font_urls.txt
           i=0
           while read -r url; do
             i=$((i+1))
-            # Map roughly to expected names; fallback numbered
             case $i in
               1) name="Cinzel-Regular.ttf" ;;
               2) name="CormorantGaramond-Regular.ttf" ;;
@@ -86,6 +83,10 @@ jobs:
       - name: Produce real video + optional Buffer
         env:
           YT_COOKIES: ${{ secrets.YT_COOKIES }}
+          YT_RAPIDAPI_KEY_1: ${{ secrets.YT_RAPIDAPI_KEY_1 }}
+          YT_RAPIDAPI_KEY_2: ${{ secrets.YT_RAPIDAPI_KEY_2 }}
+          YT_RAPIDAPI_KEY_3: ${{ secrets.YT_RAPIDAPI_KEY_3 }}
+          YT_RAPIDAPI_KEY_4: ${{ secrets.YT_RAPIDAPI_KEY_4 }}
           BUFFER_ACCESS_TOKEN: ${{ secrets.BUFFER_ACCESS_TOKEN }}
           GROQ_API_KEY_1: ${{ secrets.GROQ_API_KEY_1 }}
           GROQ_API_KEY_2: ${{ secrets.GROQ_API_KEY_2 }}
@@ -99,17 +100,14 @@ jobs:
           DEMO_ONLY: ${{ inputs.demo_only || 'false' }}
         run: |
           set -euo pipefail
-          # Real end-to-end: sourcing -> whisper -> vicestyle 4K -> qc -> meta
           python run_real.py
 
-          # Prefer the 9:16 shorts output
           SRC=$(ls -1 out.shorts.mp4 out.wide.mp4 2>/dev/null | head -1 || true)
           if [ -z "$SRC" ]; then
             echo "No rendered video found"
             exit 1
           fi
 
-          # Ensure rolling media-cache release exists
           gh release view media-cache --repo "$REPO" >/dev/null 2>&1 || \
             gh release create media-cache --repo "$REPO" --title "RIYIO media cache" --notes "Rolling public media for Buffer" || true
 
@@ -122,7 +120,6 @@ jobs:
           echo "SHORTS_URL=$SHORTS_URL"
           export SHORTS_URL
 
-          # Print meta
           if [ -f meta.json ]; then
             echo "==== GENERATED META ===="
             cat meta.json
