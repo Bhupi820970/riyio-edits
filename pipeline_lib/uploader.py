@@ -67,7 +67,7 @@ def get_organization_id() -> str | None:
 
 def list_channels(org_id: str) -> list[dict]:
     data = _gql("""
-        query GetChannels($org: String!) {
+        query GetChannels($org: OrganizationId!) {
           channels(input: { organizationId: $org }) {
             id
             name
