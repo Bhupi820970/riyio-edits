@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
-"""Real end-to-end runner for the RIYIO pipeline.
+"""Real end-to-end runner — NO dummy/black/sine fallbacks.
 
-sourcing (yt-dlp + YT_COOKIES + Groq vet) -> Whisper transcript
--> vicestyle.py 4K dual render -> qc -> meta
+1. Download REAL HD clip + REAL song from YouTube (yt-dlp + YT_COOKIES)
+2. Groq Vision 4-corner watermark vet on keyframes
+3. Real faster-whisper word-level transcript
+4. vicestyle.py renders real montage + real dialogue with real captions
+5. meta.py generates savage scene-matched hook for the top bar
+If clip or song download fails → exit non-zero with the real error.
 """
 from __future__ import annotations
 
@@ -18,90 +22,154 @@ from pipeline_lib.qc import qc_video
 from pipeline_lib.sourcing import ytdlp_cookie_args, search_queries_for, vet_keyframes_with_groq
 
 
-def _run(cmd, timeout=300):
-    print("+", " ".join(cmd[:8]), "...")
+def _run(cmd, timeout=400, check=True):
+    print("+", " ".join(str(c) for c in cmd[:10]), "...")
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-    if r.returncode != 0:
-        print((r.stderr or "")[-600:])
+    if check and r.returncode != 0:
+        err = (r.stderr or r.stdout or "")[-1200:]
+        print("FAIL:", err)
+        raise RuntimeError(err)
     return r
 
 
-def download_clip(query: str, out_dir: Path) -> Path | None:
-    out_dir.mkdir(parents=True, exist_ok=True)
-    tmpl = str(out_dir / "clip.%(ext)s")
-    cmd = ["yt-dlp", "--no-playlist", "-f", "bv*+ba/b", "--merge-output-format", "mp4",
-           "-o", tmpl, f"ytsearch1:{query}"]
+def download_yt(query: str, out_path: Path, kind: str) -> dict:
+    """Download one result. Returns info dict with title/id. Raises on failure."""
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    info_json = out_path.with_suffix(".info.json")
+    cmd = [
+        "yt-dlp", "--no-playlist", "--print-to-file", "title", str(info_json.with_suffix(".title")),
+        "--print-to-file", "id", str(info_json.with_suffix(".id")),
+        "-f", "bv*[height<=1080]+ba/b[height<=1080]/b",
+        "--merge-output-format", "mp4",
+        "-o", str(out_path),
+        f"ytsearch1:{query}",
+    ]
     cmd += ytdlp_cookie_args()
-    r = _run(cmd, timeout=180)
-    for p in out_dir.glob("clip.*"):
-        if p.suffix.lower() in {".mp4", ".mkv", ".webm"}:
-            return p
-    return None
+    _run(cmd, timeout=240)
+    if not out_path.exists():
+        # yt-dlp may have written with different ext
+        candidates = list(out_path.parent.glob(out_path.stem + ".*"))
+        real = next((p for p in candidates if p.suffix.lower() in {".mp4", ".mkv", ".webm", ".m4a", ".mp3"}), None)
+        if not real:
+            raise RuntimeError(f"{kind} download produced no file for query: {query}")
+        real.rename(out_path)
+    title = ""
+    vid = ""
+    tfile = info_json.with_suffix(".title")
+    ifile = info_json.with_suffix(".id")
+    if tfile.exists():
+        title = tfile.read_text().strip()
+    if ifile.exists():
+        vid = ifile.read_text().strip()
+    print(f"DOWNLOADED {kind}: title='{title}' id='{vid}' path={out_path}")
+    return {"title": title, "id": vid, "path": out_path}
 
 
-def transcribe(path: Path) -> str:
+def extract_keyframes(video: Path, n: int = 4) -> list[str]:
+    """Extract n frames as base64 for Groq vetting."""
+    import base64
+    frames = []
+    dur = 10.0
     try:
-        from faster_whisper import WhisperModel
-        model = WhisperModel("tiny", device="cpu", compute_type="int8")
-        segments, _ = model.transcribe(str(path), beam_size=1)
-        return " ".join(s.text.strip() for s in segments)[:800]
-    except Exception as e:
-        print("whisper skip:", e)
-        return ""
+        r = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                            "-of", "csv=p=0", str(video)], capture_output=True, text=True, timeout=20)
+        dur = float(r.stdout.strip() or 10)
+    except Exception:
+        pass
+    for i in range(n):
+        t = max(1.0, dur * (i + 1) / (n + 1))
+        img = video.parent / f".kf_{i}.jpg"
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", str(t), "-i", str(video),
+                        "-frames:v", "1", "-q:v", "3", str(img)], timeout=30)
+        if img.exists():
+            frames.append(base64.b64encode(img.read_bytes()).decode())
+            img.unlink(missing_ok=True)
+    return frames
+
+
+def whisper_words(path: Path) -> tuple[str, list[dict]]:
+    """Return (full_text, word_list with s/e)."""
+    from faster_whisper import WhisperModel
+    model = WhisperModel("base", device="cpu", compute_type="int8")
+    segments, _ = model.transcribe(str(path), beam_size=1, word_timestamps=True)
+    words = []
+    texts = []
+    for seg in segments:
+        texts.append(seg.text.strip())
+        for w in (seg.words or []):
+            words.append({"word": w.word.strip(), "s": float(w.start), "e": float(w.end)})
+    full = " ".join(texts)[:1000]
+    print("WHISPER DIALOGUE:", full[:300] or "(none)")
+    print(f"WHISPER WORDS: {len(words)}")
+    return full, words
 
 
 def main():
     ensure_queue()
-    item = next_ready() or {"id": "demo", "topic": "cinematic dialogue scene", "genre": "movies"}
-    print("ITEM", item.get("id"), item.get("topic"))
+    item = next_ready() or {"id": "demo", "topic": "cinematic movie dialogue scene", "genre": "movies"}
+    print("ITEM", item.get("id"), item.get("topic"), item.get("genre"))
 
-    clips = Path("clips")
-    song = Path("song.mp3")
-    # minimal silent song if none
-    if not song.exists():
-        _run(["ffmpeg", "-y", "-f", "lavfi", "-i", "sine=frequency=220:duration=40",
-              "-c:a", "libmp3lame", str(song)])
+    genre = item.get("genre", "movies")
+    topic = item.get("topic", "cinematic dialogue scene")
 
-    queries = search_queries_for(item.get("genre", "movies"), item.get("topic", "cinematic scene"))
-    clip = None
-    for q in queries[:2]:
-        clip = download_clip(q, clips)
-        if clip:
+    # Real song download
+    song_query = item.get("song_query") or f"{genre} trending soundtrack"
+    song_path = Path("song.mp3")
+    song_info = download_yt(song_query + " audio", song_path, "SONG")
+
+    # Real clip download
+    queries = search_queries_for(genre, topic)
+    clip_path = Path("clips/clip.mp4")
+    clip_info = None
+    last_err = None
+    for q in queries[:3]:
+        try:
+            clip_info = download_yt(q, clip_path, "CLIP")
             break
-    if not clip:
-        print("no clip downloaded — creating placeholder vertical source")
-        clips.mkdir(exist_ok=True)
-        clip = clips / "placeholder.mp4"
-        _run(["ffmpeg", "-y", "-f", "lavfi", "-i", "color=c=0x111111:s=1920x1080:d=12",
-              "-f", "lavfi", "-i", "sine=frequency=440:duration=12",
-              "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", str(clip)])
+        except Exception as e:
+            last_err = e
+            print("clip try failed:", e)
+    if not clip_info:
+        raise SystemExit(f"CLIP DOWNLOAD FAILED — no fallback. Last error: {last_err}")
 
-    transcript = transcribe(clip)
-    print("TRANSCRIPT:", transcript[:200] or "(none)")
+    # Groq 4-corner vet
+    frames = extract_keyframes(clip_path)
+    if frames:
+        vet = vet_keyframes_with_groq(frames, title=clip_info.get("title", ""), channel="")
+        print("GROQ VET:", vet)
+        if not vet.get("accept", True):
+            raise SystemExit(f"CLIP REJECTED by Groq watermark vet: {vet}")
 
+    # Real Whisper
+    transcript, words = whisper_words(clip_path)
+    if len(words) < 3:
+        print("WARNING: very few Whisper words — continuing with what we have")
+
+    # Savage hook from real transcript
+    meta = generate_metadata(topic, genre, transcript)
+    hook = (meta.get("hook") or topic)[:60]
+    print("SAVAGE HOOK:", hook)
+    Path("meta.json").write_text(json.dumps(meta, indent=2))
+    Path("whisper_words.json").write_text(json.dumps(words))
+
+    # Real render
     out = Path("out.mp4")
     cmd = [sys.executable, "vicestyle.py", "auto",
-           "--song", str(song), "--clips", str(clips),
-           "--out", str(out), "--mode", "dual", "--res", "1920x1080"]
-    r = _run(cmd, timeout=600)
+           "--song", str(song_path), "--clips", "clips",
+           "--out", str(out), "--mode", "dual", "--res", "1920x1080",
+           "--hook", hook]
+    _run(cmd, timeout=900)
+
     shorts = Path("out.shorts.mp4")
-    wide = Path("out.wide.mp4")
-    if not shorts.exists() and wide.exists():
-        # force a 9:16 from wide if engine didn't emit shorts
-        _run(["ffmpeg", "-y", "-i", str(wide),
-              "-vf", "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2",
-              "-c:v", "libx264", "-crf", "18", "-c:a", "copy", str(shorts)])
+    if not shorts.exists():
+        raise SystemExit("RENDER FAILED — out.shorts.mp4 not produced")
 
-    meta = generate_metadata(item.get("topic", ""), item.get("genre", "movies"), transcript)
-    print("META", json.dumps(meta, indent=2))
-    Path("meta.json").write_text(json.dumps(meta, indent=2))
-
-    if shorts.exists():
-        ok, reasons = qc_video(shorts)
-        print("QC", ok, reasons)
+    ok, reasons = qc_video(shorts)
+    print("QC", ok, reasons)
     if item.get("id") != "demo":
         mark_done(item["id"])
     print("DONE")
+    print("SOURCES: clip=", clip_info, "song=", song_info)
 
 
 if __name__ == "__main__":

@@ -189,27 +189,33 @@ def render_caption_block(items: list[tuple], fpath: str, anim: str = "pop") -> I
     return out
 
 
-def build_captions(segs: list[Seg], W: int, H: int, pattern: dict, base: Path) -> list[dict]:
-    """Simplified caption builder. In production this would use whisper word timings + face detection."""
+def build_captions(segs: list[Seg], W: int, H: int, pattern: dict, base: Path,
+                   whisper_words: list[dict] | None = None) -> list[dict]:
+    """Build beside-speaker captions from real Whisper word timings.
+    whisper_words: [{"word": str, "s": float, "e": float}, ...]
+    """
     events = []
     fpath = CP.font_path(pattern.get("font_hint"))
-    # demo captions placed beside speaker zones
-    demo = [
-        (0.8, 2.2, ["YOU", "ARE"]),
-        (4.0, 5.5, ["THE", "ONE"]),
-        (8.0, 9.5, ["WHO", "MATTERS"]),
-    ]
-    for s, e, words in demo:
-        items = [(w, pattern["keys"][i % len(pattern["keys"])], int(H * pattern["key"]))
-                 for i, w in enumerate(words)]
+    words = whisper_words or []
+    if not words:
+        return events
+    # group into short chunks of 2-3 words
+    chunks = chunk_words(words, max_words=3)
+    for ch in chunks[:8]:  # keep it tight
+        s = ch[0]["s"]
+        e = ch[-1]["e"]
+        items = [(clean_word(w["word"]), pattern["keys"][i % len(pattern["keys"])],
+                  int(H * pattern["key"]))
+                 for i, w in enumerate(ch) if clean_word(w["word"])]
+        if not items:
+            continue
         img = render_caption_block(items, fpath, pattern.get("anim", "pop"))
-        # place beside (upper-left / mid-right style)
-        x = int(W * 0.08) if hash(words[0]) % 2 == 0 else int(W * 0.62)
+        x = int(W * 0.08) if hash(items[0][0]) % 2 == 0 else int(W * 0.58)
         y = int(H * pattern["no_face_y"])
         events.append({
-            "f0": int(s * FPS), "f1": int(e * FPS), "img": img,
-            "x": x, "y": y, "text": " ".join(words), "anim": pattern.get("anim", "pop"),
-            "pop": True,
+            "f0": int(s * FPS), "f1": int(min(e + 0.3, s + 3.5) * FPS), "img": img,
+            "x": x, "y": y, "text": " ".join(t for t, *_ in items),
+            "anim": pattern.get("anim", "pop"), "pop": True,
         })
     return events
 
@@ -351,9 +357,9 @@ def make_shorts(wide: Path, out: Path, hook: str, fpath: str):
     d = ImageDraw.Draw(bar)
     size = 120
     f = ImageFont.truetype(fpath, size)
-    bb = d.textbbox((0, 0), hook or "RIYIO", font=f)
+    bb = d.textbbox((0, 0), hook or "", font=f)
     d.text(((W - (bb[2] - bb[0])) / 2, (bar_h - (bb[3] - bb[1])) / 2),
-           hook or "RIYIO", font=f, fill=(0, 0, 0, 255))
+           hook or "", font=f, fill=(0, 0, 0, 255))
     bp = out.parent / f".{out.stem}_hook.png"
     bar.save(bp)
     vf = (f"[0:v]split[a][b];[a]scale=270:480:force_original_aspect_ratio=increase,crop=270:480,"
@@ -386,7 +392,7 @@ def layout(segs: list[Seg], binfo: dict, song_start: float) -> float:
 def render(segs: list[Seg], song: Path, song_start: float | None, out: Path, mode: str,
            res: str, hook: str | None, font: str | None, black_tail: float = 0.6,
            workers: int = 2, crf: int = 16, pattern: str | None = None,
-           slowed_reverb: bool = False) -> dict:
+           slowed_reverb: bool = False, whisper_words: list[dict] | None = None) -> dict:
     W, H = map(int, res.lower().split("x"))
     fpath = CP.font_path(font)
     binfo = detect_beats(song)
@@ -416,13 +422,22 @@ def render(segs: list[Seg], song: Path, song_start: float | None, out: Path, mod
     wav = tmp / "mix.wav"
     mix_audio(song, song_start, total_cut, segs, wav, slowed_reverb=slowed_reverb)
     pat = CP.get(pattern) if pattern else CP.pick_pattern()
-    events = build_captions(segs, W, H, pat, base)
+    # Load real Whisper words if the runner wrote them
+    ww = whisper_words
+    if ww is None:
+        wj = Path("whisper_words.json")
+        if wj.exists():
+            try:
+                ww = json.loads(wj.read_text())
+            except Exception:
+                ww = None
+    events = build_captions(segs, W, H, pat, base, whisper_words=ww)
     wide_out = out.with_suffix(".wide.mp4") if mode == "dual" else (out if mode == "wide" else tmp / "wide.mp4")
     composite(base, events, W, H, wav, wide_out, nframes, crf, fpath)
     shorts_out = None
     if mode in ("shorts", "dual"):
         shorts_out = out.with_suffix(".shorts.mp4") if mode == "dual" else out
-        make_shorts(wide_out, shorts_out, hook or "RIYIO", fpath)
+        make_shorts(wide_out, shorts_out, hook or "", fpath)
     meta = {
         "duration": total, "shots": len(segs), "tempo": binfo["tempo"],
         "wide": str(wide_out), "shorts": str(shorts_out) if shorts_out else None,
@@ -501,7 +516,7 @@ def main(argv=None):
         p.add_argument("--out", required=True, type=Path)
         p.add_argument("--mode", choices=["wide", "shorts", "dual"], default="dual")
         p.add_argument("--res", default="3840x2160")
-        p.add_argument("--hook", default="RIYIO")
+        p.add_argument("--hook", default="")
         p.add_argument("--font", default=None)
         p.add_argument("--song-start", type=float, default=None)
         p.add_argument("--workers", type=int, default=2)
