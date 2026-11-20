@@ -14,7 +14,7 @@ import json
 from .groq_client import chat as groq_chat, available as groq_available, TEXT_MODEL
 
 
-def generate_metadata(topic: str, genre: str, transcript: str = "") -> dict:
+def generate_metadata(topic: str, genre: str, transcript: str = "", song_credit: str = "") -> dict:
     """Return platform-optimized metadata.
 
     Keys:
@@ -81,10 +81,9 @@ Reply with JSON only, no markdown:
             while len(tags) < 5:
                 tags.append("#RIYIO")
             desc = data.get("description") or fallback["description"]
-            # Always append clean credits
-            credits = f"\n\nClip: {topic} | Audio: {data.get('song_name') or 'Original Mix'}"
+            credit = song_credit or data.get("song_name") or "Original Mix"
             if "Clip:" not in desc:
-                desc = desc.rstrip() + credits
+                desc = desc.rstrip() + f"\n\nClip: {topic} | Audio: {credit}"
             return {
                 "hook": (data.get("hook") or fallback["hook"])[:120],
                 "title_youtube": (data.get("title_youtube") or fallback["title_youtube"])[:70],
@@ -92,7 +91,7 @@ Reply with JSON only, no markdown:
                 "caption_instagram": (data.get("caption_instagram") or fallback["caption_instagram"])[:150],
                 "hashtags": tags[:7],
                 "description": desc,
-                "song_name": data.get("song_name") or "Original Mix",
+                "song_name": credit,
             }
     except Exception:
         pass

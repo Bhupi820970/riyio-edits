@@ -21,7 +21,7 @@ from pipeline_lib.meta import generate_metadata
 from pipeline_lib.qc import qc_video
 from pipeline_lib.sourcing import (
     ytdlp_cookie_args, search_queries_for, vet_keyframes_with_groq,
-    pick_song_from_bank, yt_song_cmd, GENRE_MOOD,
+    pick_song_from_bank, song_credit, GENRE_MOOD, load_catalog,
 )
 from pipeline_lib.links import load_clip_links
 
@@ -120,23 +120,15 @@ def main():
     genre = item.get("genre", "movies")
     topic = item.get("topic", "cinematic dialogue scene")
 
-    # Song: songs-bank / local songs/ first, then YouTube with PO Token
+    # Song: local songs/ (from songs-bank) first — never YouTube for songs in daily runs
     songs_dir = Path("songs")
     songs_dir.mkdir(exist_ok=True)
-    song_path = pick_song_from_bank(genre, songs_dir)
-    song_info = {"source": "songs-bank", "path": str(song_path)} if song_path else None
+    song_path, song_entry = pick_song_from_bank(genre, songs_dir)
     if not song_path:
-        song_path = Path("song.mp3")
-        song_query = item.get("song_query") or f"{GENRE_MOOD.get(genre, 'epic')} cinematic soundtrack"
-        cmd = yt_song_cmd(song_query, song_path)
-        try:
-            _run(cmd, timeout=240)
-            song_info = {"source": "youtube", "query": song_query, "path": str(song_path)}
-            print("DOWNLOADED SONG from YouTube:", song_query)
-        except Exception as e:
-            raise SystemExit(f"SONG DOWNLOAD FAILED — no songs-bank match and YouTube failed: {e}")
-    else:
-        print("USING SONG FROM BANK:", song_path)
+        raise SystemExit("NO SONG in songs/ — populate songs-bank or local songs/ first")
+    credit = song_credit(song_entry, song_path)
+    print("USING SONG:", song_path.name, "|", credit)
+    song_info = {"source": "songs-bank", "path": str(song_path), "credit": credit}
 
     # Clip: prefer inbox/links first, then search
     clip_path = Path("clips/clip.mp4")
@@ -178,7 +170,7 @@ def main():
         print("WARNING: very few Whisper words — continuing with what we have")
 
     # Savage hook from real transcript
-    meta = generate_metadata(topic, genre, transcript)
+    meta = generate_metadata(topic, genre, transcript, song_credit=credit)
     if song_info and song_info.get("source") == "songs-bank":
         meta["song_name"] = Path(song_info["path"]).stem
     elif song_info and song_info.get("query"):
