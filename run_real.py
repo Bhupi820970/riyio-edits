@@ -37,7 +37,10 @@ def download_yt(query: str, out_path: Path, kind: str) -> dict:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     info_json = out_path.with_suffix(".info.json")
     cmd = [
-        "yt-dlp", "--no-playlist", "--print-to-file", "title", str(info_json.with_suffix(".title")),
+        "yt-dlp", "--no-playlist",
+        "--js-runtimes", "deno",
+        "--extractor-args", "youtube:player_client=web,default",
+        "--print-to-file", "title", str(info_json.with_suffix(".title")),
         "--print-to-file", "id", str(info_json.with_suffix(".id")),
         "-f", "bv*[height<=1080]+ba/b[height<=1080]/b",
         "--merge-output-format", "mp4",

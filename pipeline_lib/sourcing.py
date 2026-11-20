@@ -43,18 +43,23 @@ Reply with JSON: {"accept": true/false, "reason": "short reason"}
 
 
 def ytdlp_cookie_args() -> list[str]:
-    """If YT_COOKIES (raw Netscape or base64) is set, write to temp and return --cookies path."""
+    """If YT_COOKIES (raw Netscape or base64) is set, write a proper cookies.txt and return --cookies path."""
     cookies_env = (os.environ.get("YT_COOKIES") or "").strip()
     if not cookies_env:
         return []
     try:
-        if not cookies_env.startswith("#") and "\t" not in cookies_env[:80]:
+        if not cookies_env.startswith("#") and "\t" not in cookies_env[:120]:
             cookies_env = base64.b64decode(cookies_env).decode("utf-8", errors="ignore")
+        # Ensure Netscape header so yt-dlp accepts the file
+        if not cookies_env.startswith("# Netscape") and not cookies_env.startswith("# HTTP Cookie File"):
+            cookies_env = "# Netscape HTTP Cookie File\n" + cookies_env
         fd, path = tempfile.mkstemp(suffix=".txt", prefix="ytcookies_")
         os.write(fd, cookies_env.encode())
         os.close(fd)
+        os.chmod(path, 0o600)
         return ["--cookies", path]
-    except Exception:
+    except Exception as e:
+        print("cookie write failed:", e)
         return []
 
 

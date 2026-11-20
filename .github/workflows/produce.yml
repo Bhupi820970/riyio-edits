@@ -42,10 +42,15 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install system deps
+      - name: Install system deps + deno (yt-dlp JS runtime)
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg
+          sudo apt-get install -y ffmpeg curl unzip
+          # deno for yt-dlp YouTube extraction
+          curl -fsSL https://deno.land/install.sh | sh
+          echo "$HOME/.deno/bin" >> $GITHUB_PATH
+          export PATH="$HOME/.deno/bin:$PATH"
+          deno --version || true
 
       - name: Install Python deps
         run: pip install -r requirements.txt
