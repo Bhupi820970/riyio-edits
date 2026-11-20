@@ -63,12 +63,18 @@ jobs:
       - name: Produce videos
         env:
           YT_COOKIES: ${{ secrets.YT_COOKIES }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           BUFFER_ACCESS_TOKEN: ${{ secrets.BUFFER_ACCESS_TOKEN }}
-          # Optional public URLs for the rendered files (Buffer requires publicly reachable media)
           WIDE_URL: ${{ secrets.WIDE_URL }}
           SHORTS_URL: ${{ secrets.SHORTS_URL }}
+          # Groq primary AI (rotation)
+          GROQ_API_KEY_1: ${{ secrets.GROQ_API_KEY_1 }}
+          GROQ_API_KEY_2: ${{ secrets.GROQ_API_KEY_2 }}
+          GROQ_API_KEY_3: ${{ secrets.GROQ_API_KEY_3 }}
+          GROQ_API_KEY_4: ${{ secrets.GROQ_API_KEY_4 }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          # Optional fallbacks
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
           python - << 'PY'
           from pipeline_lib.queue_manager import next_ready, mark_done, ensure_queue

@@ -1,13 +1,18 @@
 """Pre-upload quality gate.
 
 Checks: file exists & size > 5MB, duration 28–48s, audio mean_volume > -35dB,
-no unexpected corner watermark. Gemini keys first, fallback to Groq / OpenRouter.
+no unexpected corner watermark.
+
+PRIMARY AI for watermark/scene checks: Groq (vision models).
+GEMINI_API_KEY_* and OPENROUTER_API_KEY are optional fallbacks only.
 """
 from __future__ import annotations
 
 import os
 import subprocess
 from pathlib import Path
+
+from .groq_client import available as groq_available, chat as groq_chat
 
 
 def _run(cmd: list[str], timeout: int = 40) -> subprocess.CompletedProcess:
@@ -48,6 +53,30 @@ def check_audio(path: Path) -> tuple[bool, str]:
     return False, "could not measure volume"
 
 
+def check_watermark_groq(path: Path) -> tuple[bool, str]:
+    """Lightweight Groq vision check on a mid-frame if keys are available."""
+    if not groq_available():
+        return True, "groq unavailable — watermark check deferred"
+    # Extract one frame for a quick visual pass
+    frame = path.parent / f".{path.stem}_qc.jpg"
+    try:
+        _run(["ffmpeg", "-y", "-v", "error", "-ss", "5", "-i", str(path),
+              "-frames:v", "1", "-q:v", "3", str(frame)], timeout=30)
+        if not frame.exists():
+            return True, "could not extract frame"
+        import base64
+        b64 = base64.b64encode(frame.read_bytes()).decode()
+        from .sourcing import vet_keyframes_with_groq
+        res = vet_keyframes_with_groq([b64], title=path.name)
+        frame.unlink(missing_ok=True)
+        if res.get("accept"):
+            return True, "groq watermark check passed"
+        return False, f"groq watermark reject: {res.get('reason', '')[:120]}"
+    except Exception as e:
+        frame.unlink(missing_ok=True)
+        return True, f"groq watermark check skipped ({e})"
+
+
 def gemini_available() -> bool:
     for i in range(1, 21):
         if os.environ.get(f"GEMINI_API_KEY_{i}"):
@@ -61,10 +90,13 @@ def qc_video(path: Path) -> tuple[bool, list[str]]:
         ok, msg = fn(path)
         if not ok:
             reasons.append(msg)
-    if not gemini_available():
-        if os.environ.get("GROQ_API_KEY") or os.environ.get("OPENROUTER_API_KEY"):
-            reasons.append("Gemini unavailable; Groq/OpenRouter fallback available for vet")
+    ok, msg = check_watermark_groq(path)
+    if not ok:
+        reasons.append(msg)
+    if not groq_available():
+        if gemini_available() or os.environ.get("OPENROUTER_API_KEY"):
+            reasons.append("Groq unavailable; optional Gemini/OpenRouter fallback present")
         else:
-            reasons.append("no AI keys for deep watermark vet")
-    hard_fail = any(k in " ".join(reasons) for k in ("missing", "too small", "outside", "quiet"))
+            reasons.append("no primary Groq keys for deep vet")
+    hard_fail = any(k in " ".join(reasons) for k in ("missing", "too small", "outside", "quiet", "reject"))
     return not hard_fail, reasons

@@ -1,12 +1,12 @@
 """30-video pending backup queue + auto-refill.
 
 Maintains inbox/queue.json. Tracks history for zero repeats.
-When pending <= 6, notifies via Telegram (if configured) and refills to 30.
+When pending <= 6, automatically refills to 30.
+Queue refill notifications are handled externally via Grok routines — no Telegram required.
 """
 from __future__ import annotations
 
 import json
-import os
 import random
 from pathlib import Path
 
@@ -98,21 +98,6 @@ def mark_done(item_id: str, source_ids: list[str] | None = None, song: str | Non
     save_history(h)
 
 
-def _notify_telegram(msg: str) -> None:
-    token = os.environ.get("TELEGRAM_BOT_TOKEN")
-    chat = os.environ.get("TELEGRAM_CHAT_ID")
-    if not token or not chat:
-        return
-    try:
-        import urllib.request
-        url = f"https://api.telegram.org/bot{token}/sendMessage"
-        data = json.dumps({"chat_id": chat, "text": msg}).encode()
-        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
-        urllib.request.urlopen(req, timeout=10)
-    except Exception:
-        pass
-
-
 def refill_queue(target: int = 30) -> int:
     q = load_queue()
     h = load_history()
@@ -140,12 +125,9 @@ def refill_queue(target: int = 30) -> int:
         used.add(topic.lower())
         added += 1
     save_queue(q)
-    if added:
-        _notify_telegram(f"RIYIO queue refilled: +{added} (now {pending_count(q)} pending)")
     return added
 
 
 def ensure_queue(min_pending: int = 6, target: int = 30) -> None:
     if pending_count() <= min_pending:
-        _notify_telegram(f"RIYIO queue low ({pending_count()} pending) — refilling to {target}")
         refill_queue(target)
