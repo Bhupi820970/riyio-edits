@@ -13,7 +13,8 @@
     "romance_15_2097",
     "gaming_16_4817",
     "sports_17_1313",
-    "racing_18_5087"
+    "racing_18_5087",
+    "movies_19_4822"
   ],
   "source_ids": [
     "2123801040210518476",
@@ -29,7 +30,8 @@
     "TOjTt40cvjE",
     "JwFxqEaIHmE",
     "E4vj3-yc8XM",
-    "07rwVa8Hb84"
+    "07rwVa8Hb84",
+    "onVhbeY7nLM"
   ],
   "used_patterns": [
     "P01",
@@ -50,6 +52,7 @@
     "emotional_10.mp3",
     "aggressive_3.mp3",
     "emotional_8.mp3",
-    "aggressive_2.mp3"
+    "aggressive_2.mp3",
+    "epic_1.mp3"
   ]
 }
