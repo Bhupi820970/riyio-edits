@@ -1,7 +1,7 @@
 """Metadata generation via Groq (PRIMARY).
 
 Uses llama-3.3-70b-versatile with the actual Whisper dialogue transcript to
-write a short, savage, cold 1-line hook that matches the scene, plus platform
+write a short, savage, cold, high-curiosity 1-line hook (max 8-10 words) that is SPECIFIC to this exact scene and dialogue. NEVER use generic clichés like "Full throttle. Zero fear.", "Built different.", "Wrong man. Wrong night." or anything that could apply to any video., plus platform
 titles/captions/hashtags.
 
 The hook bar must NEVER show queue IDs / topic seeds / numbers. If Groq fails
