@@ -157,16 +157,16 @@ def clean_word(w: str) -> str:
 
 
 def render_caption_block(items: list[tuple], fpath: str, anim: str = "pop") -> Image.Image:
-    """Cinematic glowing stacked captions (reference style: Odyssey / GoT / GTA edits)."""
+    """Strong multi-color glowing captions (Money Really Talks style)."""
     lines = []
     for t, c, s in items:
-        f = ImageFont.truetype(fpath, s)
+        f = ImageFont.truetype(fpath, int(s * 1.15))
         bb = f.getbbox(t)
-        lines.append((t, c, s, f, bb))
-    pad = 36
-    gap = 8
-    Wb = max((bb[2] - bb[0] for *_, bb in lines), default=120) + pad * 2
-    Hb = sum((bb[3] - bb[1] for *_, bb in lines)) + gap * (len(lines) - 1) + pad * 2
+        lines.append((t, c, int(s * 1.15), f, bb))
+    pad = 40
+    gap = 6
+    Wb = max((bb[2] - bb[0] for *_, bb in lines), default=140) + pad * 2
+    Hb = sum((bb[3] - bb[1] for *_, bb in lines)) + gap * max(0, len(lines) - 1) + pad * 2
     img = Image.new("RGBA", (Wb, Hb), (0, 0, 0, 0))
     shadow = Image.new("RGBA", (Wb, Hb), (0, 0, 0, 0))
     glow = Image.new("RGBA", (Wb, Hb), (0, 0, 0, 0))
@@ -176,15 +176,14 @@ def render_caption_block(items: list[tuple], fpath: str, anim: str = "pop") -> I
     y = pad
     for t, c, s, f, bb in lines:
         x = (Wb - (bb[2] - bb[0])) // 2 - bb[0]
-        # strong neon glow
-        for r in (6, 10, 14):
-            dg.text((x, y - bb[1]), t, font=f, fill=(*c, 70), stroke_width=r)
-        # hard shadow
-        ds.text((x + 3, y + 4 - bb[1]), t, font=f, fill=(0, 0, 0, 200))
-        # main text with thin black outline
-        d.text((x, y - bb[1]), t, font=f, fill=(*c, 255), stroke_width=max(2, s // 22), stroke_fill=(0, 0, 0, 255))
+        # heavy neon glow
+        for r, a in ((4, 90), (8, 60), (14, 40)):
+            dg.text((x, y - bb[1]), t, font=f, fill=(*c, a), stroke_width=r)
+        ds.text((x + 2, y + 3 - bb[1]), t, font=f, fill=(0, 0, 0, 220))
+        d.text((x, y - bb[1]), t, font=f, fill=(*c, 255),
+               stroke_width=max(2, s // 20), stroke_fill=(0, 0, 0, 255))
         y += (bb[3] - bb[1]) + gap
-    glow = glow.filter(ImageFilter.GaussianBlur(5))
+    glow = glow.filter(ImageFilter.GaussianBlur(6))
     out = Image.alpha_composite(glow, shadow)
     out = Image.alpha_composite(out, img)
     return out
@@ -368,20 +367,24 @@ def composite(base: Path, events: list[dict], W: int, H: int, audio: Path, out: 
 
 
 def make_shorts(wide: Path, out: Path, hook: str, fpath: str):
-    """Reliable full 9:16 center-crop. Always produces video+audio."""
-    # First ensure the source has a video stream
+    """Full 9:16 center-crop + top title bar (Money Really Talks style)."""
     probe = run(["ffprobe", "-v", "error", "-select_streams", "v:0",
                   "-show_entries", "stream=codec_type", "-of", "csv=p=0", str(wide)], check=False)
     if "video" not in (probe.stdout or ""):
         raise RuntimeError(f"wide render has no video stream: {wide}")
-    vf = "scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920"
+    title = (hook or "MONEY REALLY TALKS").upper()[:28]
+    safe = title.replace("'", "").replace(":", "")
+    vf = (
+        "scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920,"
+        f"drawtext=fontfile={fpath}:text='"{safe}"':fontcolor=white:fontsize=48:"
+        "box=1:boxcolor=black@0.65:boxborderw=14:x=(w-text_w)/2:y=28"
+    )
     cmd = ["ffmpeg", "-y", "-v", "error", "-i", str(wide),
            "-vf", vf, "-map", "0:v", "-map", "0:a?",
            "-c:v", "libx264", "-preset", "medium", "-crf", "18",
            "-c:a", "aac", "-b:a", "192k", "-shortest",
            "-movflags", "+faststart", str(out)]
     run(cmd)
-    # verify
     vcheck = run(["ffprobe", "-v", "error", "-select_streams", "v:0",
                    "-show_entries", "stream=codec_type", "-of", "csv=p=0", str(out)], check=False)
     if "video" not in (vcheck.stdout or ""):
