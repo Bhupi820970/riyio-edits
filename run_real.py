@@ -4,7 +4,7 @@
 1. Song from songs-bank release only; clips via RapidAPI (YouTube) / yt-dlp (X)
 2. Clean-content vet (Groq vision, heuristic fallback): no watermarks/face-cams/
    corner logos/scoreboards/streamer overlays; prefer longer coherent sources
-3. Real faster-whisper word-level transcript
+3. Real faster-whisper word-level transcript (small model for better accuracy)
 4. vicestyle.py renders real montage + real dialogue with real captions
 5. meta.py generates savage scene-matched hook for the top bar
 If clip or song download fails → exit non-zero with the real error.
@@ -95,16 +95,44 @@ def extract_keyframes(video: Path, n: int = 4) -> list[str]:
 
 
 def whisper_words(path: Path) -> tuple[str, list[dict]]:
-    """Return (full_text, word_list with s/e)."""
+    """Return (full_text, word_list with s/e).
+
+    Uses 'small' model (better accuracy than base) with higher beam and VAD
+    for cleaner word-level timestamps. Falls back to base if small fails.
+    """
     from faster_whisper import WhisperModel
-    model = WhisperModel("base", device="cpu", compute_type="int8")
-    segments, _ = model.transcribe(str(path), beam_size=1, word_timestamps=True)
+    model_name = "small"
+    try:
+        model = WhisperModel(model_name, device="cpu", compute_type="int8")
+    except Exception:
+        print("small model unavailable, falling back to base")
+        model_name = "base"
+        model = WhisperModel(model_name, device="cpu", compute_type="int8")
+    print(f"WHISPER model={model_name}")
+    segments, info = model.transcribe(
+        str(path),
+        beam_size=5,
+        word_timestamps=True,
+        vad_filter=True,
+        vad_parameters=dict(min_silence_duration_ms=400),
+        condition_on_previous_text=False,
+        language="en",
+    )
     words = []
     texts = []
     for seg in segments:
-        texts.append(seg.text.strip())
+        txt = (seg.text or "").strip()
+        if txt:
+            texts.append(txt)
         for w in (seg.words or []):
-            words.append({"word": w.word.strip(), "s": float(w.start), "e": float(w.end)})
+            word = (w.word or "").strip()
+            if not word or len(word) < 1:
+                continue
+            # Drop very low confidence if available
+            prob = getattr(w, "probability", 1.0) or 1.0
+            if prob < 0.35:
+                continue
+            words.append({"word": word, "s": float(w.start), "e": float(w.end)})
     full = " ".join(texts)[:1000]
     print("WHISPER DIALOGUE:", full[:300] or "(none)")
     print(f"WHISPER WORDS: {len(words)}")
