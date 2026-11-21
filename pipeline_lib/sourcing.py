@@ -251,16 +251,28 @@ def clean_topic(topic: str) -> str:
 
 
 def search_queries_for(genre: str, topic: str) -> list[str]:
+    """Topic-first queries so 'Iron Man' / actor names pull the right movie clips."""
     t = clean_topic(topic) or f"{genre} cinematic scene"
-    # Prioritize specific movie/series scene searches for cohesive sourcing
-    return [
-        f"{t} best scenes",
+    # Strong specific queries first
+    qs = [
+        f"{t} best scenes 4k",
         f"{t} official clip",
-        f"{t} movie scene 4k",
-        f"best {t} dialogue scenes",
-        f"{t} film clip no watermark",
-        f"{genre} {t} cinematic scene",
+        f"{t} movie scene",
+        f"{t} dialogue scene",
+        f"{t} film clip",
+        f"best {t} scenes",
+        f"{t} 4k scene",
+        f"{genre} {t} cinematic",
     ]
+    # Dedup while preserving order
+    seen = set()
+    out = []
+    for q in qs:
+        q = re.sub(r"\s+", " ", q).strip()
+        if q and q.lower() not in seen:
+            seen.add(q.lower())
+            out.append(q)
+    return out[:6]
 
 
 def title_is_clean(title: str, channel: str = "") -> tuple[bool, str]:
