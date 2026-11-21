@@ -222,7 +222,7 @@ def build_captions(segs: list[Seg], W: int, H: int, pattern: dict, base: Path,
             s = ch[0]["s"]
             e = ch[-1]["e"]
             items = [(clean_word(w["word"]), pattern["keys"][i % len(pattern["keys"])],
-                      int(H * pattern["key"]))
+                      int(H * pattern["key"] * 1.12))
                      for i, w in enumerate(ch) if clean_word(w["word"])]
             if not items:
                 continue
@@ -364,24 +364,26 @@ def composite(base: Path, events: list[dict], W: int, H: int, audio: Path, out: 
 
 
 def make_shorts(wide: Path, out: Path, hook: str, fpath: str):
-    """4K 9:16: blurred bg + white hook bar + centered 21:9 video."""
+    """4K 9:16: blurred bg + centered 21:9 video. Hook is subtle text overlay, not a solid white bar."""
     W, H = 2160, 3840
     BW, BH = 2160, 1215
-    vy = (H - BH) // 2 + 80
-    bar_h = 140
-    bar = Image.new("RGBA", (W, bar_h), (255, 255, 255, 230))
+    vy = (H - BH) // 2 + 40
+    # Subtle thin bar instead of massive white block
+    bar_h = 90
+    bar = Image.new("RGBA", (W, bar_h), (0, 0, 0, 140))  # dark semi-transparent
     d = ImageDraw.Draw(bar)
-    size = 72
+    size = 52
     f = ImageFont.truetype(fpath, size)
     bb = d.textbbox((0, 0), hook or "", font=f)
-    d.text(((W - (bb[2] - bb[0])) / 2, (bar_h - (bb[3] - bb[1])) / 2),
-           hook or "", font=f, fill=(0, 0, 0, 255))
+    tw, th = bb[2] - bb[0], bb[3] - bb[1]
+    d.text(((W - tw) / 2 - bb[0], (bar_h - th) / 2 - bb[1]),
+           hook or "", font=f, fill=(255, 255, 255, 230))
     bp = out.parent / f".{out.stem}_hook.png"
     bar.save(bp)
     vf = (f"[0:v]split[a][b];[a]scale=270:480:force_original_aspect_ratio=increase,crop=270:480,"
-          f"boxblur=12:4,eq=brightness=-0.1,scale={W}:{H}[bg];"
+          f"boxblur=10:3,eq=brightness=-0.06,scale={W}:{H}[bg];"
           f"[b]scale={BW}:{BH}:flags=lanczos[fg];[bg][fg]overlay=0:{vy}[v1];"
-          f"[v1][1:v]overlay=0:{vy - bar_h},format=yuv420p")
+          f"[v1][1:v]overlay=0:{vy - bar_h - 20},format=yuv420p")
     run(["ffmpeg", "-y", "-v", "error", "-i", str(wide), "-i", str(bp),
          "-filter_complex", vf, "-map", "0:a", "-c:v", "libx264", "-preset", "medium",
          "-crf", "16", "-maxrate", "50M", "-c:a", "copy", "-movflags", "+faststart", str(out)])

@@ -42,7 +42,7 @@ FONT_MAP = {
 }
 
 _P = [
-    ("P01", "Champagne beside-mid", [0.0], 0.85, 0.0, 3, (.072, .062, .048), [CHAMPAGNE_GOLD, IVORY, WHITE], .28, "Cinzel", "pop"),
+    ("P01", "Neon beside-mid", [0.0], 0.9, 0.0, 3, (.095, .078, .048), [ICY_CYAN, CRIMSON, AMBER, WHITE], .30, "Montserrat Medium", "pop"),
     ("P02", "Icy upper-left", [-0.55], 0.9, 0.0, 3, (.070, .060, .046), [ICY_CYAN, WHITE, SILVER], .22, "Montserrat Light", "slide"),
     ("P03", "Soft rose mid-right", [0.0], 0.88, 0.02, 3, (.068, .058, .044), [SOFT_ROSE, SILVER, WHITE], .30, "Cormorant Garamond", "fade"),
     ("P04", "Lavender stepped diagonal", [-0.5, 0.0, 0.5], 0.82, 0.0, 3, (.070, .060, .046), [LAVENDER, PEARL, WHITE], .26, "Playfair Display Italic", "drop"),
