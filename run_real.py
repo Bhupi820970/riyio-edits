@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -110,11 +111,34 @@ def whisper_words(path: Path) -> tuple[str, list[dict]]:
     return full, words
 
 
-def gather_clips(genre: str, topic: str, used_ids: set[str], want_total: float = 120.0,
-                 max_clips: int = 3, max_tries: int = 10) -> list[dict]:
-    """Collect clean, genre-matched longer clips (prefer 45-180s) from the SAME topic so
-    auto_plan can cut many short non-overlapping distinct scenes from coherent sources.
-    Fewer mixed movies = pro-style cohesive edit.
+def _title_core(title: str) -> str:
+    """Extract a rough movie/series core for same-source matching."""
+    t = re.sub(r"[^a-z0-9 ]", " ", (title or "").lower())
+    t = re.sub(r"\b(best|dialogue|dialogues|scene|scenes|official|clip|4k|hd|full|movie|film|series|episode|ep)\b", " ", t)
+    return re.sub(r"\s+", " ", t).strip()[:60]
+
+
+def _same_source(a: str, b: str) -> bool:
+    ca, cb = _title_core(a), _title_core(b)
+    if not ca or not cb:
+        return False
+    # Strong overlap of meaningful words
+    sa, sb = set(ca.split()), set(cb.split())
+    if not sa or not sb:
+        return False
+    inter = sa & sb
+    return len(inter) >= 2 and (len(inter) / min(len(sa), len(sb))) >= 0.45
+
+
+def gather_clips(genre: str, topic: str, used_ids: set[str], want_total: float = 90.0,
+                 max_clips: int = 2, max_tries: int = 8) -> list[dict]:
+    """Collect clean footage preferring ONE coherent movie/series.
+
+    Strategy:
+    1. Search and rank longer clean candidates.
+    2. Accept the best long primary source first.
+    3. Only accept a second clip if its title strongly matches the primary (same movie/series).
+    4. Prefer cutting many short non-overlapping shots from the primary long source.
     """
     cands: list[dict] = []
     for link in load_clip_links(genre=genre):
@@ -124,7 +148,7 @@ def gather_clips(genre: str, topic: str, used_ids: set[str], want_total: float =
                           "via": "rapidapi" if youtube_id(link) else "yt-dlp"})
     if rapid_available():
         seen = set()
-        for q in search_queries_for(genre, topic)[:4]:
+        for q in search_queries_for(genre, topic)[:5]:
             try:
                 res = rapid_search(q)
             except Exception as e:
@@ -135,8 +159,7 @@ def gather_clips(genre: str, topic: str, used_ids: set[str], want_total: float =
                 if not v["id"] or v["id"] in used_ids or v["id"] in seen:
                     continue
                 seen.add(v["id"])
-                # Prefer longer coherent sources for multiple short cuts
-                if not (45.0 <= v["duration"] <= 240.0):
+                if not (40.0 <= v["duration"] <= 300.0):
                     continue
                 ok, why = title_is_clean(v["title"], v["channel"])
                 if not ok:
@@ -147,24 +170,29 @@ def gather_clips(genre: str, topic: str, used_ids: set[str], want_total: float =
     else:
         print("WARNING: no YT_RAPIDAPI_KEY_* — only non-YouTube links can be used")
 
-    # Sort longer first so we prefer coherent long sources
+    # Prefer longer sources first
     cands.sort(key=lambda c: -c.get("duration", 0))
 
     got: list[dict] = []
+    primary_title = ""
     tries = 0
     for c in cands:
         if len(got) >= max_clips or sum(g["dur"] for g in got) >= want_total or tries >= max_tries:
             break
         tries += 1
+        # After first clip, only accept strongly matching same-source titles
+        if got and not _same_source(primary_title, c.get("title", "")):
+            print("  skip (different source):", c.get("title", "")[:70])
+            continue
         out = Path("clips") / f"clip{len(got) + 1}.mp4"
         out.unlink(missing_ok=True)
         try:
             if c["via"] == "rapidapi":
                 d = c.get("duration") or 0.0
                 st = en = None
-                if d > 90:
-                    st = max(10.0, d * 0.15)
-                    en = min(st + 90.0, d - 5)
+                if d > 100:
+                    st = max(15.0, d * 0.1)
+                    en = min(st + 85.0, d - 8)
                 info = rapid_download(c["url"], "1080", out, start=st, end=en)
                 title = c.get("title") or info.get("title", "")
             else:
@@ -175,7 +203,7 @@ def gather_clips(genre: str, topic: str, used_ids: set[str], want_total: float =
             out.unlink(missing_ok=True)
             continue
         dur = probe_dur(out)
-        if dur < 30:
+        if dur < 28:
             print(f"  REJECT too short ({dur:.1f}s): {title[:60]}")
             out.unlink(missing_ok=True)
             continue
@@ -187,6 +215,8 @@ def gather_clips(genre: str, topic: str, used_ids: set[str], want_total: float =
             continue
         print(f"  ACCEPT clip {out.name}: {dur:.1f}s '{title[:70]}' id={c['id']}")
         got.append({"path": out, "dur": dur, "title": title, "id": c["id"], "url": c["url"]})
+        if not primary_title:
+            primary_title = title
     return got
 
 
@@ -206,14 +236,14 @@ def main():
     _run(["ffmpeg", "-y", "-v", "error", "-i", str(song_mp3), "-ac", "2", "-ar", "48000", str(song_wav)])
     print("AUDIO SOURCE: songs-bank/" + song_entry["file"], "|", credit)
 
-    # Clips: fewer longer coherent sources so auto_plan can cut many short distinct scenes
+    # Clips: prefer one coherent long source so auto_plan can cut many short distinct scenes
     shutil.rmtree("clips", ignore_errors=True)
     Path("clips").mkdir()
     clips = gather_clips(genre, topic, used_ids)
     total = sum(c["dur"] for c in clips)
     print(f"CLIPS: {len(clips)} accepted, {total:.1f}s unique footage: "
           + ", ".join(f"{c['path'].name}={c['dur']:.1f}s" for c in clips))
-    if not clips or total < 40:
+    if not clips or total < 35:
         raise SystemExit(f"NOT ENOUGH CLEAN FOOTAGE ({total:.1f}s) — refusing to loop short clips")
 
     # Real Whisper on every clip -> per-clip word map for full captions.
