@@ -147,26 +147,35 @@ def _title_core(title: str) -> str:
 
 
 def _same_source(a: str, b: str) -> bool:
+    """Very strict: require substantial title overlap OR same core movie/game name.
+    Rejects mixed games (Fallout / RDR2 / Destiny) and random movies.
+    """
     ca, cb = _title_core(a), _title_core(b)
     if not ca or not cb:
         return False
-    # Strong overlap of meaningful words
-    sa, sb = set(ca.split()), set(cb.split())
+    sa, sb = set(w for w in ca.split() if len(w) > 2), set(w for w in cb.split() if len(w) > 2)
     if not sa or not sb:
         return False
     inter = sa & sb
-    return len(inter) >= 2 and (len(inter) / min(len(sa), len(sb))) >= 0.45
+    # Need at least 2 shared meaningful words AND high ratio
+    if len(inter) >= 2 and (len(inter) / min(len(sa), len(sb))) >= 0.55:
+        return True
+    # Or one title contains the other core
+    if len(ca) > 8 and (ca in cb or cb in ca):
+        return True
+    return False
 
 
 def gather_clips(genre: str, topic: str, used_ids: set[str], want_total: float = 90.0,
-                 max_clips: int = 2, max_tries: int = 8) -> list[dict]:
-    """Collect clean footage preferring ONE coherent movie/series.
+                 max_clips: int = 1, max_tries: int = 10) -> list[dict]:
+    """Collect clean footage from ONE coherent movie/series only.
 
     Strategy:
     1. Search and rank longer clean candidates.
     2. Accept the best long primary source first.
     3. Only accept a second clip if its title strongly matches the primary (same movie/series).
     4. Prefer cutting many short non-overlapping shots from the primary long source.
+    Default max_clips=1 so we never mix unrelated sources.
     """
     cands: list[dict] = []
     for link in load_clip_links(genre=genre):
