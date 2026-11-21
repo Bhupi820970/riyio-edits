@@ -1,74 +1,53 @@
-"""Pro-style punchy neon captions matching Vice Cartel / proedit approved look.
+"""15 caption patterns — all variations of the approved GTA code edit (`vice_style_code.mp4`).
 
-Words beside the speaker, key words big + colored, fillers small white, hard shadow,
-exact approved hot pink, dialogue-synced, multi-word chunks.
+Every pattern keeps the approved caption look: words BESIDE the speaker on the side away from
+their face, alternating left/right when there is no face, never covering a face (mirrored /
+nudged if they would), Anton font, hard black drop-shadow + outline, the same 80%->100% pop-in,
+key words big + filler words small and white, every key word a different colour.
+
+Only the placement rhythm, offsets, word grouping and size mix change between patterns:
+  y      : vertical anchor per caption chunk, in face-heights from the face centre, cycled
+           through the list (e.g. [0] = beside-mid, [-0.6] = beside-upper, [-0.6, 0, 0.6] = step down)
+  gap    : horizontal distance from the face centre, in face-widths (approved = 0.9)
+  nudge  : extra shift toward the frame centre (fraction of width)
+  words  : max words per caption chunk (approved = 3)
+  key/key_long/filler : text heights as a fraction of frame height (approved .098/.082/.052)
+  no_face_y : vertical position (fraction of height) when nobody's face is visible
+Every palette has 4-5 colours and includes the approved hot pink (255, 46, 196).
+P01 is the approved edit exactly and is also the renderer default.
 """
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
-REPO = Path(__file__).resolve().parent
-HISTORY_PATH = REPO / "history.json"
-FONTS_DIR = REPO / "fonts"
-
-# Exact proedit / Vice Cartel neon palette
-PINK = (255, 46, 196)          # approved hot pink from vice_style_code
-CYAN = (0, 238, 255)
-YELLOW = (255, 228, 40)
-PURPLE = (178, 92, 255)
-ORANGE = (255, 140, 0)
-LIME = (170, 255, 0)
-GOLD = (255, 200, 40)
-WHITE = (255, 255, 255)
-
-FONT_MAP = {
-    "Montserrat Medium": "Montserrat-Medium.ttf",
-    "Roboto Condensed": "RobotoCondensed-Regular.ttf",
-    "Cinzel": "Cinzel-Regular.ttf",
-}
+PINK = (255, 46, 196)          # exact pink from vice_style_code (vicestyle.NEON["pink"])
+CYAN, YELLOW, PURPLE = (0, 238, 255), (255, 228, 40), (178, 92, 255)
+ORANGE, LIME, GOLD = (255, 140, 0), (170, 255, 0), (255, 200, 40)
+SKY, TEAL, CORAL = (100, 200, 255), (0, 222, 200), (255, 110, 90)
 
 _P = [
-    ("P01", "Original beside-mid (approved)", [0.0], 0.9, 0.0, 3, (.098, .082, .052), [CYAN, PINK, YELLOW, PURPLE], .30, "Montserrat Medium", "pop"),
-    ("P02", "Beside-upper", [-0.65], 0.9, 0.0, 3, (.098, .082, .052), [PINK, CYAN, YELLOW, ORANGE], .22, "Montserrat Medium", "pop"),
-    ("P03", "Beside-lower", [0.75], 0.9, 0.0, 3, (.096, .080, .050), [YELLOW, PINK, CYAN, LIME], .45, "Roboto Condensed", "slide"),
-    ("P04", "Stepping down", [-0.6, 0.0, 0.6], 0.9, 0.0, 3, (.098, .082, .052), [CYAN, PINK, PURPLE, GOLD], .30, "Montserrat Medium", "pop"),
-    ("P05", "2-word punch", [0.0], 0.9, 0.0, 2, (.108, .090, .052), [PINK, YELLOW, CYAN, ORANGE], .30, "Roboto Condensed", "pop"),
-    ("P06", "Big keys tiny fillers", [0.0], 0.9, 0.0, 3, (.116, .096, .042), [PINK, CYAN, YELLOW, PURPLE], .30, "Montserrat Medium", "fade"),
+    # id, name, y-rhythm, gap, nudge, words, (key, key_long, filler), palette, no_face_y
+    ("P01", "Original beside-mid (approved)", [0.0], 0.9, 0.0, 3, (.098, .082, .052), [CYAN, PINK, YELLOW, PURPLE], .30),
+    ("P02", "Beside-upper", [-0.65], 0.9, 0.0, 3, (.098, .082, .052), [PINK, CYAN, YELLOW, ORANGE], .22),
+    ("P03", "Beside-lower", [0.75], 0.9, 0.0, 3, (.096, .080, .050), [YELLOW, PINK, CYAN, LIME], .45),
+    ("P04", "Stepping down beside", [-0.6, 0.0, 0.6], 0.9, 0.0, 3, (.098, .082, .052), [CYAN, PINK, PURPLE, GOLD], .30),
+    ("P05", "Stepping up beside", [0.6, 0.0, -0.6], 0.9, 0.0, 3, (.098, .082, .052), [PINK, TEAL, YELLOW, PURPLE], .30),
+    ("P06", "Close + nudge to centre", [0.0], 0.75, 0.035, 3, (.094, .080, .050), [PINK, ORANGE, CYAN, YELLOW], .30),
+    ("P07", "Far beside", [-0.2], 1.25, 0.0, 3, (.098, .082, .052), [PURPLE, PINK, CYAN, LIME], .28),
+    ("P08", "2-word punch, mid", [0.0], 0.9, 0.0, 2, (.108, .090, .052), [PINK, YELLOW, SKY, ORANGE], .30),
+    ("P09", "2-word upper", [-0.55], 0.95, 0.0, 2, (.104, .088, .050), [CYAN, PINK, GOLD, PURPLE], .24),
+    ("P10", "Big keys, tiny fillers", [0.0], 0.9, 0.0, 3, (.116, .096, .042), [PINK, CYAN, YELLOW, PURPLE, ORANGE], .30),
+    ("P11", "Even mix", [-0.1], 0.9, 0.0, 3, (.088, .078, .064), [PINK, LIME, CYAN, YELLOW], .30),
+    ("P12", "Upper/lower tick-tock beside", [-0.55, 0.55], 0.9, 0.0, 3, (.098, .082, .052), [PINK, SKY, YELLOW, PURPLE], .30),
+    ("P13", "Wave beside (up-mid-down-mid), 2 words", [-0.55, 0.0, 0.55, 0.0], 0.9, 0.0, 2, (.102, .086, .050), [ORANGE, PINK, CYAN, LIME], .30),
+    ("P14", "Upper + nudge, bold keys", [-0.5], 0.8, 0.03, 3, (.106, .088, .050), [PINK, PURPLE, GOLD, CYAN, CORAL], .24),
+    ("P15", "Lower far, 2 words", [0.6], 1.15, 0.0, 2, (.100, .084, .050), [TEAL, PINK, YELLOW, ORANGE], .42),
 ]
-
-PATTERNS = [{
-    "id": i, "name": n, "y": y, "gap": g, "nudge": nu, "words": w,
-    "key": k[0], "key_long": k[1], "filler": k[2], "keys": pal,
-    "no_face_y": nf, "font_hint": fh, "anim": anim, "classic": i == "P01",
-} for i, n, y, g, nu, w, k, pal, nf, fh, anim in _P]
-
+PATTERNS = [{"id": i, "name": n, "y": y, "gap": g, "nudge": nu, "words": w, "key": k[0], "key_long": k[1],
+             "filler": k[2], "keys": pal, "no_face_y": nf, "classic": i == "P01"}
+            for i, n, y, g, nu, w, k, pal, nf in _P]
 ROTATION = [p["id"] for p in PATTERNS]
 BY_ID = {p["id"]: p for p in PATTERNS}
-BY_ID["P00"] = BY_ID["original"] = BY_ID["P01"]
-
-
-def load_history() -> dict:
-    if HISTORY_PATH.exists():
-        try:
-            return json.loads(HISTORY_PATH.read_text())
-        except Exception:
-            pass
-    return {"used_patterns": [], "uploaded": [], "source_ids": [], "songs": []}
-
-
-def save_history(h: dict) -> None:
-    HISTORY_PATH.write_text(json.dumps(h, indent=2))
-
-
-def pick_pattern() -> dict:
-    h = load_history()
-    used = set(h.get("used_patterns", [])[-8:])
-    candidates = [p for p in PATTERNS if p["id"] not in used] or PATTERNS
-    chosen = candidates[0]
-    h.setdefault("used_patterns", []).append(chosen["id"])
-    save_history(h)
-    return chosen
+BY_ID["P00"] = BY_ID["original_gta"] = BY_ID["P01"]
+assert all(PINK in p["keys"] and 4 <= len(p["keys"]) <= 5 for p in PATTERNS)
 
 
 def get(pid: str | None) -> dict:
@@ -76,10 +55,17 @@ def get(pid: str | None) -> dict:
 
 
 def font_path(hint: str | None = None) -> str:
-    name = FONT_MAP.get(hint or "Montserrat Medium", "Montserrat-Medium.ttf")
-    p = FONTS_DIR / name
-    if p.exists():
-        return str(p)
-    for f in FONTS_DIR.glob("*.ttf"):
+    """Fallback font resolver so riyio pipeline keeps working."""
+    from pathlib import Path
+    fonts = Path(__file__).resolve().parent / "fonts"
+    for name in ("Anton-Regular.ttf", "Montserrat-Medium.ttf", "RobotoCondensed-Regular.ttf"):
+        p = fonts / name
+        if p.exists():
+            return str(p)
+    for f in fonts.glob("*.ttf"):
         return str(f)
-    return "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+    return "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+
+
+def pick_pattern() -> dict:
+    return get("P01")
