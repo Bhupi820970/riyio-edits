@@ -367,7 +367,7 @@ def composite(base: Path, events: list[dict], W: int, H: int, audio: Path, out: 
 
 
 def make_shorts(wide: Path, out: Path, hook: str, fpath: str):
-    """Full 9:16 center-crop + top title bar (Money Really Talks style)."""
+    """Full 9:16 center-crop + top title bar."""
     probe = run(["ffprobe", "-v", "error", "-select_streams", "v:0",
                   "-show_entries", "stream=codec_type", "-of", "csv=p=0", str(wide)], check=False)
     if "video" not in (probe.stdout or ""):
@@ -376,7 +376,7 @@ def make_shorts(wide: Path, out: Path, hook: str, fpath: str):
     safe = title.replace("'", "").replace(":", "")
     vf = (
         "scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920,"
-        f"drawtext=fontfile={fpath}:text='"{safe}"':fontcolor=white:fontsize=48:"
+        f"drawtext=fontfile={fpath}:text=\"{safe}\":fontcolor=white:fontsize=48:"
         "box=1:boxcolor=black@0.65:boxborderw=14:x=(w-text_w)/2:y=28"
     )
     cmd = ["ffmpeg", "-y", "-v", "error", "-i", str(wide),
