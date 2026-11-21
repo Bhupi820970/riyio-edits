@@ -3,7 +3,7 @@
 
 1. Song from songs-bank release only; clips via RapidAPI (YouTube) / yt-dlp (X)
 2. Clean-content vet (Groq vision, heuristic fallback): no watermarks/face-cams/
-   corner logos/scoreboards/streamer overlays; clips must be >= 20s
+   corner logos/scoreboards/streamer overlays; prefer longer coherent sources
 3. Real faster-whisper word-level transcript
 4. vicestyle.py renders real montage + real dialogue with real captions
 5. meta.py generates savage scene-matched hook for the top bar
@@ -110,9 +110,12 @@ def whisper_words(path: Path) -> tuple[str, list[dict]]:
     return full, words
 
 
-def gather_clips(genre: str, topic: str, used_ids: set[str], want_total: float = 90.0,
-                 max_clips: int = 6, max_tries: int = 12) -> list[dict]:
-    """Collect clean, genre-matched 20-45s clips from DIFFERENT videos (unique footage, no loops)."""
+def gather_clips(genre: str, topic: str, used_ids: set[str], want_total: float = 120.0,
+                 max_clips: int = 3, max_tries: int = 10) -> list[dict]:
+    """Collect clean, genre-matched longer clips (prefer 45-180s) from the SAME topic so
+    auto_plan can cut many short non-overlapping distinct scenes from coherent sources.
+    Fewer mixed movies = pro-style cohesive edit.
+    """
     cands: list[dict] = []
     for link in load_clip_links(genre=genre):
         vid = youtube_id(link) or link.rstrip("/").split("/")[-1]
@@ -121,7 +124,7 @@ def gather_clips(genre: str, topic: str, used_ids: set[str], want_total: float =
                           "via": "rapidapi" if youtube_id(link) else "yt-dlp"})
     if rapid_available():
         seen = set()
-        for q in search_queries_for(genre, topic)[:3]:
+        for q in search_queries_for(genre, topic)[:4]:
             try:
                 res = rapid_search(q)
             except Exception as e:
@@ -132,7 +135,8 @@ def gather_clips(genre: str, topic: str, used_ids: set[str], want_total: float =
                 if not v["id"] or v["id"] in used_ids or v["id"] in seen:
                     continue
                 seen.add(v["id"])
-                if not (MIN_CLIP_S <= v["duration"] <= MAX_CLIP_SEARCH_S):
+                # Prefer longer coherent sources for multiple short cuts
+                if not (45.0 <= v["duration"] <= 240.0):
                     continue
                 ok, why = title_is_clean(v["title"], v["channel"])
                 if not ok:
@@ -142,6 +146,9 @@ def gather_clips(genre: str, topic: str, used_ids: set[str], want_total: float =
                 cands.append(v)
     else:
         print("WARNING: no YT_RAPIDAPI_KEY_* — only non-YouTube links can be used")
+
+    # Sort longer first so we prefer coherent long sources
+    cands.sort(key=lambda c: -c.get("duration", 0))
 
     got: list[dict] = []
     tries = 0
@@ -155,9 +162,9 @@ def gather_clips(genre: str, topic: str, used_ids: set[str], want_total: float =
             if c["via"] == "rapidapi":
                 d = c.get("duration") or 0.0
                 st = en = None
-                if d > 60:  # take a real 45s window, skipping intros
-                    st = max(5.0, d * 0.25)
-                    en = st + 45.0
+                if d > 90:
+                    st = max(10.0, d * 0.15)
+                    en = min(st + 90.0, d - 5)
                 info = rapid_download(c["url"], "1080", out, start=st, end=en)
                 title = c.get("title") or info.get("title", "")
             else:
@@ -168,18 +175,11 @@ def gather_clips(genre: str, topic: str, used_ids: set[str], want_total: float =
             out.unlink(missing_ok=True)
             continue
         dur = probe_dur(out)
-        if dur < MIN_CLIP_S:
-            print(f"  REJECT too short ({dur:.1f}s < {MIN_CLIP_S:.0f}s): {title[:60]}")
+        if dur < 30:
+            print(f"  REJECT too short ({dur:.1f}s): {title[:60]}")
             out.unlink(missing_ok=True)
             continue
-        if dur > 50:
-            trimmed = out.with_name(out.stem + "_t.mp4")
-            _run(["ffmpeg", "-y", "-v", "error", "-ss", f"{min(dur * 0.2, dur - 46):.2f}", "-i", str(out),
-                  "-t", "45", "-c:v", "libx264", "-preset", "veryfast", "-crf", "16",
-                  "-c:a", "aac", "-b:a", "192k", str(trimmed)], timeout=400)
-            trimmed.replace(out)
-            dur = probe_dur(out)
-        frames = extract_keyframes(out, n=4)
+        frames = extract_keyframes(out, n=5)
         vet = vet_keyframes_with_groq(frames, title=title, channel=c.get("channel", ""), video=out)
         print(f"  VET [{vet.get('by')}] accept={vet.get('accept')} :: {vet.get('reason')}")
         if not vet.get("accept"):
@@ -206,14 +206,14 @@ def main():
     _run(["ffmpeg", "-y", "-v", "error", "-i", str(song_mp3), "-ac", "2", "-ar", "48000", str(song_wav)])
     print("AUDIO SOURCE: songs-bank/" + song_entry["file"], "|", credit)
 
-    # Clips: clean, >=20s, total >=60s so no shot is ever looped. More clips = more distinct scenes.
+    # Clips: fewer longer coherent sources so auto_plan can cut many short distinct scenes
     shutil.rmtree("clips", ignore_errors=True)
     Path("clips").mkdir()
     clips = gather_clips(genre, topic, used_ids)
     total = sum(c["dur"] for c in clips)
-    print(f"CLIPS: {len(clips)} accepted, {total:.1f}s unique footage from different videos: "
+    print(f"CLIPS: {len(clips)} accepted, {total:.1f}s unique footage: "
           + ", ".join(f"{c['path'].name}={c['dur']:.1f}s" for c in clips))
-    if not clips or total < 38:
+    if not clips or total < 40:
         raise SystemExit(f"NOT ENOUGH CLEAN FOOTAGE ({total:.1f}s) — refusing to loop short clips")
 
     # Real Whisper on every clip -> per-clip word map for full captions.
