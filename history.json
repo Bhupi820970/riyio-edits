@@ -10,7 +10,8 @@
     "romance_12_1173",
     "movies_13_7841",
     "series_14_3063",
-    "romance_15_2097"
+    "romance_15_2097",
+    "gaming_16_4817"
   ],
   "source_ids": [
     "2123801040210518476",
@@ -23,7 +24,8 @@
     "jbNHRmBJMP4",
     "UVrrZZPAkvY",
     "dYvr9RPfxlM",
-    "TOjTt40cvjE"
+    "TOjTt40cvjE",
+    "JwFxqEaIHmE"
   ],
   "used_patterns": [
     "P01",
@@ -41,6 +43,7 @@
     "aggressive_1.mp3",
     "epic_9.mp3",
     "emotional_4.mp3",
-    "emotional_10.mp3"
+    "emotional_10.mp3",
+    "aggressive_3.mp3"
   ]
 }
