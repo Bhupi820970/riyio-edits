@@ -116,13 +116,13 @@ def seg_filter(seg: Seg, W: int, H: int) -> str:
     z = max(1.0, seg.zoom)
     f = [f"scale={int(W * z)}:{int(H * z)}:force_original_aspect_ratio=increase:flags=lanczos",
          f"crop={W}:{H}", "setsar=1", GRADE]
-    # Uniform 21:9 letterbox for BOTH montage and dialogue
-    bar = int(round((H - W * 9 / 21) / 2))
-    f.append(f"drawbox=x=0:y=0:w={W}:h={bar}:color=black:t=fill")
-    f.append(f"drawbox=x=0:y={H - bar}:w={W}:h={bar}:color=black:t=fill")
-    if seg.kind == "dialogue":
-        f.append("vignette=angle=PI/4.6")
-    f.append("noise=alls=4:allf=t")
+    # Immersive crop (no thin letterbox strip). Slight punch on montage.
+    if seg.kind == "montage":
+        f.append("eq=contrast=1.15:saturation=1.22:brightness=0.02")
+        f.append("unsharp=5:5:0.6:5:5:0.0")
+    else:
+        f.append("vignette=angle=PI/5")
+    f.append("noise=alls=3:allf=t")
     f.append(f"fps={FPS},format=yuv420p")
     return ",".join(f)
 
@@ -289,7 +289,7 @@ def load_audio(path: Path, sr: int, start: float, dur: float) -> np.ndarray:
 
 
 def mix_audio(song: Path, song_start: float, total: float, segs: list[Seg], out: Path,
-              duck: float = 0.18, ramp: float = 0.25, tail_fade: float = 1.8,
+              duck: float = 0.42, ramp: float = 0.25, tail_fade: float = 1.8,
               slowed_reverb: bool = False):
     sr = 48000
     n = int(round(total * sr))
@@ -317,7 +317,7 @@ def mix_audio(song: Path, song_start: float, total: float, segs: list[Seg], out:
             v = load_audio(Path(seg.src), sr, seg.start, max(0.1, seg.t1 - seg.t0))
             if len(v):
                 rms = np.sqrt(np.mean(v ** 2)) + 1e-9
-                v = v * min(6.0, 0.16 / rms)
+                v = v * min(5.0, 0.38 / rms)
                 voice[a:a + len(v)] += v[:n - a]
     k = int(ramp * sr)
     if k > 1:
@@ -368,30 +368,20 @@ def composite(base: Path, events: list[dict], W: int, H: int, audio: Path, out: 
 
 
 def make_shorts(wide: Path, out: Path, hook: str, fpath: str):
-    """4K 9:16: blurred bg + centered 21:9 video. Hook is subtle text overlay, not a solid white bar."""
-    W, H = 2160, 3840
-    BW, BH = 2160, 1215
-    vy = (H - BH) // 2 + 40
-    # Subtle thin bar instead of massive white block
-    bar_h = 90
-    bar = Image.new("RGBA", (W, bar_h), (0, 0, 0, 140))  # dark semi-transparent
-    d = ImageDraw.Draw(bar)
-    size = 52
-    f = ImageFont.truetype(fpath, size)
-    bb = d.textbbox((0, 0), hook or "", font=f)
-    tw, th = bb[2] - bb[0], bb[3] - bb[1]
-    d.text(((W - tw) / 2 - bb[0], (bar_h - th) / 2 - bb[1]),
-           hook or "", font=f, fill=(255, 255, 255, 230))
-    bp = out.parent / f".{out.stem}_hook.png"
-    bar.save(bp)
-    vf = (f"[0:v]split[a][b];[a]scale=270:480:force_original_aspect_ratio=increase,crop=270:480,"
-          f"boxblur=10:3,eq=brightness=-0.06,scale={W}:{H}[bg];"
-          f"[b]scale={BW}:{BH}:flags=lanczos[fg];[bg][fg]overlay=0:{vy}[v1];"
-          f"[v1][1:v]overlay=0:{vy - bar_h - 20},format=yuv420p")
-    run(["ffmpeg", "-y", "-v", "error", "-i", str(wide), "-i", str(bp),
-         "-filter_complex", vf, "-map", "0:a", "-c:v", "libx264", "-preset", "medium",
-         "-crf", "16", "-maxrate", "50M", "-c:a", "copy", "-movflags", "+faststart", str(out)])
-    bp.unlink(missing_ok=True)
+    """Full immersive 9:16 center-crop (no tiny letterbox). Subtle hook bar on top."""
+    W, H = 1080, 1920   # phone-native, then upscale if needed
+    # Center-crop the wide render into full vertical
+    vf = (f"scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,"
+          f"crop=1080:1920,eq=contrast=1.08:saturation=1.12,unsharp=5:5:0.4")
+    # Optional thin top hook overlay via drawtext if hook given
+    if hook and len(hook) > 3:
+        safe = hook.replace("'", "\'").replace(":", "\:")
+        vf += (f",drawtext=fontfile={fpath}:text='{safe}':fontcolor=white:fontsize=42:"
+               f"box=1:boxcolor=black@0.45:boxborderw=12:x=(w-text_w)/2:y=60")
+    run(["ffmpeg", "-y", "-v", "error", "-i", str(wide),
+         "-vf", vf, "-map", "0:a?", "-c:v", "libx264", "-preset", "medium",
+         "-crf", "18", "-maxrate", "12M", "-c:a", "aac", "-b:a", "192k",
+         "-movflags", "+faststart", str(out)])
 
 
 def layout(segs: list[Seg], binfo: dict, song_start: float) -> float:
