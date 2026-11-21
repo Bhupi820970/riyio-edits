@@ -252,12 +252,14 @@ def clean_topic(topic: str) -> str:
 
 def search_queries_for(genre: str, topic: str) -> list[str]:
     t = clean_topic(topic) or f"{genre} cinematic scene"
+    # Prioritize specific movie/series scene searches for cohesive sourcing
     return [
-        f"{t} movie scene",
+        f"{t} best scenes",
         f"{t} official clip",
-        f"best {t} scenes 4k",
-        f"{genre} {t} cinematic",
+        f"{t} movie scene 4k",
+        f"best {t} dialogue scenes",
         f"{t} film clip no watermark",
+        f"{genre} {t} cinematic scene",
     ]
 
 
