@@ -322,7 +322,7 @@
     ],
     "song_query": "uplifting cinematic",
     "style_mode": "dual",
-    "status": "pending"
+    "status": "processing"
   },
   {
     "id": "sports_26_1329",
@@ -386,6 +386,318 @@
       "motivational speech scene 542 full scene"
     ],
     "song_query": "uplifting cinematic",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "series_31_7821",
+    "genre": "series",
+    "topic": "series finale moment 5888",
+    "search_queries": [
+      "series finale moment 5888",
+      "series finale moment 5888 official",
+      "series finale moment 5888 full scene"
+    ],
+    "song_query": "dramatic score",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "romance_32_6963",
+    "genre": "romance",
+    "topic": "love confession scene 3269",
+    "search_queries": [
+      "love confession scene 3269",
+      "love confession scene 3269 official",
+      "love confession scene 3269 full scene"
+    ],
+    "song_query": "soft piano",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "romance_33_3464",
+    "genre": "romance",
+    "topic": "love confession scene 4530",
+    "search_queries": [
+      "love confession scene 4530",
+      "love confession scene 4530 official",
+      "love confession scene 4530 full scene"
+    ],
+    "song_query": "soft piano",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "sports_34_5977",
+    "genre": "sports",
+    "topic": "championship moment 666",
+    "search_queries": [
+      "championship moment 666",
+      "championship moment 666 official",
+      "championship moment 666 full scene"
+    ],
+    "song_query": "hype anthem",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "romance_35_8289",
+    "genre": "romance",
+    "topic": "love confession scene 2331",
+    "search_queries": [
+      "love confession scene 2331",
+      "love confession scene 2331 official",
+      "love confession scene 2331 full scene"
+    ],
+    "song_query": "soft piano",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "sports_36_4502",
+    "genre": "sports",
+    "topic": "championship moment 3054",
+    "search_queries": [
+      "championship moment 3054",
+      "championship moment 3054 official",
+      "championship moment 3054 full scene"
+    ],
+    "song_query": "hype anthem",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "gaming_37_2318",
+    "genre": "gaming",
+    "topic": "epic gaming moment 6760",
+    "search_queries": [
+      "epic gaming moment 6760",
+      "epic gaming moment 6760 official",
+      "epic gaming moment 6760 full scene"
+    ],
+    "song_query": "trap beat",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "romance_38_4766",
+    "genre": "romance",
+    "topic": "love confession scene 2400",
+    "search_queries": [
+      "love confession scene 2400",
+      "love confession scene 2400 official",
+      "love confession scene 2400 full scene"
+    ],
+    "song_query": "soft piano",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "series_39_6775",
+    "genre": "series",
+    "topic": "tv show best dialogue 1898",
+    "search_queries": [
+      "tv show best dialogue 1898",
+      "tv show best dialogue 1898 official",
+      "tv show best dialogue 1898 full scene"
+    ],
+    "song_query": "dramatic score",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "sports_40_5309",
+    "genre": "sports",
+    "topic": "championship moment 7260",
+    "search_queries": [
+      "championship moment 7260",
+      "championship moment 7260 official",
+      "championship moment 7260 full scene"
+    ],
+    "song_query": "hype anthem",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "motivation_41_9766",
+    "genre": "motivation",
+    "topic": "underdog story scene 4654",
+    "search_queries": [
+      "underdog story scene 4654",
+      "underdog story scene 4654 official",
+      "underdog story scene 4654 full scene"
+    ],
+    "song_query": "uplifting cinematic",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "series_42_9979",
+    "genre": "series",
+    "topic": "series finale moment 4326",
+    "search_queries": [
+      "series finale moment 4326",
+      "series finale moment 4326 official",
+      "series finale moment 4326 full scene"
+    ],
+    "song_query": "dramatic score",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "motivation_43_8173",
+    "genre": "motivation",
+    "topic": "inspirational movie quote 3772",
+    "search_queries": [
+      "inspirational movie quote 3772",
+      "inspirational movie quote 3772 official",
+      "inspirational movie quote 3772 full scene"
+    ],
+    "song_query": "uplifting cinematic",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "movies_44_6916",
+    "genre": "movies",
+    "topic": "blockbuster fight 6121",
+    "search_queries": [
+      "blockbuster fight 6121",
+      "blockbuster fight 6121 official",
+      "blockbuster fight 6121 full scene"
+    ],
+    "song_query": "epic orchestral",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "motivation_45_7609",
+    "genre": "motivation",
+    "topic": "inspirational movie quote 6970",
+    "search_queries": [
+      "inspirational movie quote 6970",
+      "inspirational movie quote 6970 official",
+      "inspirational movie quote 6970 full scene"
+    ],
+    "song_query": "uplifting cinematic",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "sports_46_4777",
+    "genre": "sports",
+    "topic": "athlete press conference 905",
+    "search_queries": [
+      "athlete press conference 905",
+      "athlete press conference 905 official",
+      "athlete press conference 905 full scene"
+    ],
+    "song_query": "hype anthem",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "series_47_6240",
+    "genre": "series",
+    "topic": "tv series emotional scene 423",
+    "search_queries": [
+      "tv series emotional scene 423",
+      "tv series emotional scene 423 official",
+      "tv series emotional scene 423 full scene"
+    ],
+    "song_query": "dramatic score",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "gaming_48_8184",
+    "genre": "gaming",
+    "topic": "open world scene 7991",
+    "search_queries": [
+      "open world scene 7991",
+      "open world scene 7991 official",
+      "open world scene 7991 full scene"
+    ],
+    "song_query": "trap beat",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "romance_49_1463",
+    "genre": "romance",
+    "topic": "heartfelt couple moment 1452",
+    "search_queries": [
+      "heartfelt couple moment 1452",
+      "heartfelt couple moment 1452 official",
+      "heartfelt couple moment 1452 full scene"
+    ],
+    "song_query": "soft piano",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "racing_50_7640",
+    "genre": "racing",
+    "topic": "car chase scene 8372",
+    "search_queries": [
+      "car chase scene 8372",
+      "car chase scene 8372 official",
+      "car chase scene 8372 full scene"
+    ],
+    "song_query": "high energy electronic",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "anime_51_7083",
+    "genre": "anime",
+    "topic": "anime best moment 3581",
+    "search_queries": [
+      "anime best moment 3581",
+      "anime best moment 3581 official",
+      "anime best moment 3581 full scene"
+    ],
+    "song_query": "j-pop instrumental",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "romance_52_2091",
+    "genre": "romance",
+    "topic": "heartfelt couple moment 3342",
+    "search_queries": [
+      "heartfelt couple moment 3342",
+      "heartfelt couple moment 3342 official",
+      "heartfelt couple moment 3342 full scene"
+    ],
+    "song_query": "soft piano",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "movies_53_7154",
+    "genre": "movies",
+    "topic": "cinematic dialogue 8771",
+    "search_queries": [
+      "cinematic dialogue 8771",
+      "cinematic dialogue 8771 official",
+      "cinematic dialogue 8771 full scene"
+    ],
+    "song_query": "epic orchestral",
+    "style_mode": "dual",
+    "status": "pending"
+  },
+  {
+    "id": "gaming_54_6010",
+    "genre": "gaming",
+    "topic": "open world scene 7064",
+    "search_queries": [
+      "open world scene 7064",
+      "open world scene 7064 official",
+      "open world scene 7064 full scene"
+    ],
+    "song_query": "trap beat",
     "style_mode": "dual",
     "status": "pending"
   }
