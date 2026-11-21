@@ -1,4 +1,7 @@
-"""Pro-style punchy neon captions (cyan/pink/yellow/purple) — big, bold, dialogue-synced.
+"""Pro-style punchy neon captions matching Vice Cartel / proedit approved look.
+
+Words beside the speaker, key words big + colored, fillers small white, hard shadow,
+exact approved hot pink, dialogue-synced, multi-word chunks.
 """
 from __future__ import annotations
 
@@ -9,13 +12,15 @@ REPO = Path(__file__).resolve().parent
 HISTORY_PATH = REPO / "history.json"
 FONTS_DIR = REPO / "fonts"
 
-# Pro neon palette matching Vice Cartel style
-CYAN = (0, 255, 255)
-PINK = (255, 0, 180)
-YELLOW = (255, 255, 0)
-PURPLE = (180, 0, 255)
-WHITE = (255, 255, 255)
+# Exact proedit / Vice Cartel neon palette
+PINK = (255, 46, 196)          # approved hot pink from vice_style_code
+CYAN = (0, 238, 255)
+YELLOW = (255, 228, 40)
+PURPLE = (178, 92, 255)
 ORANGE = (255, 140, 0)
+LIME = (170, 255, 0)
+GOLD = (255, 200, 40)
+WHITE = (255, 255, 255)
 
 FONT_MAP = {
     "Montserrat Medium": "Montserrat-Medium.ttf",
@@ -24,10 +29,12 @@ FONT_MAP = {
 }
 
 _P = [
-    ("P01", "Neon punch", [0.0], 0.85, 0.0, 3, (.11, .09, .06), [CYAN, PINK, YELLOW, WHITE], .28, "Montserrat Medium", "pop"),
-    ("P02", "Cyan yellow", [-0.4], 0.88, 0.0, 2, (.105, .085, .055), [CYAN, YELLOW, WHITE], .25, "Roboto Condensed", "slide"),
-    ("P03", "Pink purple", [0.0], 0.82, 0.0, 3, (.10, .08, .05), [PINK, PURPLE, WHITE], .32, "Montserrat Medium", "fade"),
-    ("P04", "Yellow cyan", [0.3], 0.9, 0.0, 2, (.115, .09, .06), [YELLOW, CYAN, WHITE], .22, "Roboto Condensed", "pop"),
+    ("P01", "Original beside-mid (approved)", [0.0], 0.9, 0.0, 3, (.098, .082, .052), [CYAN, PINK, YELLOW, PURPLE], .30, "Montserrat Medium", "pop"),
+    ("P02", "Beside-upper", [-0.65], 0.9, 0.0, 3, (.098, .082, .052), [PINK, CYAN, YELLOW, ORANGE], .22, "Montserrat Medium", "pop"),
+    ("P03", "Beside-lower", [0.75], 0.9, 0.0, 3, (.096, .080, .050), [YELLOW, PINK, CYAN, LIME], .45, "Roboto Condensed", "slide"),
+    ("P04", "Stepping down", [-0.6, 0.0, 0.6], 0.9, 0.0, 3, (.098, .082, .052), [CYAN, PINK, PURPLE, GOLD], .30, "Montserrat Medium", "pop"),
+    ("P05", "2-word punch", [0.0], 0.9, 0.0, 2, (.108, .090, .052), [PINK, YELLOW, CYAN, ORANGE], .30, "Roboto Condensed", "pop"),
+    ("P06", "Big keys tiny fillers", [0.0], 0.9, 0.0, 3, (.116, .096, .042), [PINK, CYAN, YELLOW, PURPLE], .30, "Montserrat Medium", "fade"),
 ]
 
 PATTERNS = [{
@@ -56,7 +63,7 @@ def save_history(h: dict) -> None:
 
 def pick_pattern() -> dict:
     h = load_history()
-    used = set(h.get("used_patterns", [])[-10:])
+    used = set(h.get("used_patterns", [])[-8:])
     candidates = [p for p in PATTERNS if p["id"] not in used] or PATTERNS
     chosen = candidates[0]
     h.setdefault("used_patterns", []).append(chosen["id"])
