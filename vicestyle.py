@@ -38,7 +38,7 @@ WM_TINT_ALPHA = 22
 WM_SHADOW = 0.12
 WM_GLASS_MASK = 0.60
 WM_EDGE = 0.38
-GRADE = "eq=contrast=1.12:saturation=1.28:brightness=0.01:gamma=0.98"
+GRADE = "eq=contrast=1.14:brightness=-0.03:saturation=1.12,unsharp=5:5:1.1:5:5:0.0,vignette=PI/5"
 VIDEO_EXT = {".mp4", ".mov", ".mkv", ".webm"}
 
 
@@ -288,7 +288,7 @@ def load_audio(path: Path, sr: int, start: float, dur: float) -> np.ndarray:
 
 
 def mix_audio(song: Path, song_start: float, total: float, segs: list[Seg], out: Path,
-              duck: float = 0.42, ramp: float = 0.25, tail_fade: float = 1.8,
+              duck: float = 0.25, ramp: float = 0.25, tail_fade: float = 1.8,
               slowed_reverb: bool = False):
     sr = 48000
     n = int(round(total * sr))
@@ -316,7 +316,7 @@ def mix_audio(song: Path, song_start: float, total: float, segs: list[Seg], out:
             v = load_audio(Path(seg.src), sr, seg.start, max(0.1, seg.t1 - seg.t0))
             if len(v):
                 rms = np.sqrt(np.mean(v ** 2)) + 1e-9
-                v = v * min(5.0, 0.38 / rms)
+                v = v * min(4.0, 0.85 / rms)
                 voice[a:a + len(v)] += v[:n - a]
     k = int(ramp * sr)
     if k > 1:
@@ -367,21 +367,24 @@ def composite(base: Path, events: list[dict], W: int, H: int, audio: Path, out: 
 
 
 def make_shorts(wide: Path, out: Path, hook: str, fpath: str):
-    """Full 9:16 center-crop + top title bar."""
+    """Full 9:16 + sleek top hook bar (Money Really Talks style)."""
     probe = run(["ffprobe", "-v", "error", "-select_streams", "v:0",
                   "-show_entries", "stream=codec_type", "-of", "csv=p=0", str(wide)], check=False)
     if "video" not in (probe.stdout or ""):
         raise RuntimeError(f"wide render has no video stream: {wide}")
-    title = (hook or "MONEY REALLY TALKS").upper()[:28]
-    safe = title.replace("'", "").replace(":", "")
+    title = (hook or "MONEY REALLY TALKS").upper()[:32]
+    safe = title.replace("'", "").replace(":", " ")
+    # Sleek white top bar ~7% height with shadow
     vf = (
         "scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920,"
-        f"drawtext=fontfile={fpath}:text=\"{safe}\":fontcolor=white:fontsize=48:"
-        "box=1:boxcolor=black@0.65:boxborderw=14:x=(w-text_w)/2:y=28"
+        "drawbox=x=0:y=0:w=1080:h=130:color=white@0.92:t=fill,"
+        "drawbox=x=0:y=120:w=1080:h=20:color=black@0.35:t=fill,"
+        f"drawtext=fontfile={fpath}:text=\"{safe}\":fontcolor=black:fontsize=42:"
+        "x=(w-text_w)/2:y=38"
     )
     cmd = ["ffmpeg", "-y", "-v", "error", "-i", str(wide),
            "-vf", vf, "-map", "0:v", "-map", "0:a?",
-           "-c:v", "libx264", "-preset", "medium", "-crf", "18",
+           "-c:v", "libx264", "-preset", "medium", "-crf", "17",
            "-c:a", "aac", "-b:a", "192k", "-shortest",
            "-movflags", "+faststart", str(out)]
     run(cmd)
