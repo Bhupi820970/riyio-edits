@@ -252,8 +252,13 @@ def clean_topic(topic: str) -> str:
 
 def search_queries_for(genre: str, topic: str) -> list[str]:
     t = clean_topic(topic) or f"{genre} cinematic scene"
-    return [f"{t} scene", f"{t} official clip", f"best {genre} {t} scene 4k",
-            f"{genre} cinematic scene"]
+    return [
+        f"{t} movie scene",
+        f"{t} official clip",
+        f"best {t} scenes 4k",
+        f"{genre} {t} cinematic",
+        f"{t} film clip no watermark",
+    ]
 
 
 def title_is_clean(title: str, channel: str = "") -> tuple[bool, str]:
