@@ -11,7 +11,8 @@
     "movies_13_7841",
     "series_14_3063",
     "romance_15_2097",
-    "gaming_16_4817"
+    "gaming_16_4817",
+    "sports_17_1313"
   ],
   "source_ids": [
     "2123801040210518476",
@@ -25,7 +26,8 @@
     "UVrrZZPAkvY",
     "dYvr9RPfxlM",
     "TOjTt40cvjE",
-    "JwFxqEaIHmE"
+    "JwFxqEaIHmE",
+    "E4vj3-yc8XM"
   ],
   "used_patterns": [
     "P01",
@@ -44,6 +46,7 @@
     "epic_9.mp3",
     "emotional_4.mp3",
     "emotional_10.mp3",
-    "aggressive_3.mp3"
+    "aggressive_3.mp3",
+    "emotional_8.mp3"
   ]
 }
