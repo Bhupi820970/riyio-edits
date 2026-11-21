@@ -368,20 +368,24 @@ def composite(base: Path, events: list[dict], W: int, H: int, audio: Path, out: 
 
 
 def make_shorts(wide: Path, out: Path, hook: str, fpath: str):
-    """Full immersive 9:16 center-crop (no tiny letterbox). Subtle hook bar on top."""
-    W, H = 1080, 1920   # phone-native, then upscale if needed
-    # Center-crop the wide render into full vertical
-    vf = (f"scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,"
-          f"crop=1080:1920,eq=contrast=1.08:saturation=1.12,unsharp=5:5:0.4")
-    # Optional thin top hook overlay via drawtext if hook given
-    if hook and len(hook) > 3:
-        safe = hook.replace("'", "\'").replace(":", "\:")
-        vf += (f",drawtext=fontfile={fpath}:text='{safe}':fontcolor=white:fontsize=42:"
-               f"box=1:boxcolor=black@0.45:boxborderw=12:x=(w-text_w)/2:y=60")
-    run(["ffmpeg", "-y", "-v", "error", "-i", str(wide),
-         "-vf", vf, "-map", "0:a?", "-c:v", "libx264", "-preset", "medium",
-         "-crf", "18", "-maxrate", "12M", "-c:a", "aac", "-b:a", "192k",
-         "-movflags", "+faststart", str(out)])
+    """Reliable full 9:16 center-crop. Always produces video+audio."""
+    # First ensure the source has a video stream
+    probe = run(["ffprobe", "-v", "error", "-select_streams", "v:0",
+                  "-show_entries", "stream=codec_type", "-of", "csv=p=0", str(wide)], check=False)
+    if "video" not in (probe.stdout or ""):
+        raise RuntimeError(f"wide render has no video stream: {wide}")
+    vf = "scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920"
+    cmd = ["ffmpeg", "-y", "-v", "error", "-i", str(wide),
+           "-vf", vf, "-map", "0:v", "-map", "0:a?",
+           "-c:v", "libx264", "-preset", "medium", "-crf", "18",
+           "-c:a", "aac", "-b:a", "192k", "-shortest",
+           "-movflags", "+faststart", str(out)]
+    run(cmd)
+    # verify
+    vcheck = run(["ffprobe", "-v", "error", "-select_streams", "v:0",
+                   "-show_entries", "stream=codec_type", "-of", "csv=p=0", str(out)], check=False)
+    if "video" not in (vcheck.stdout or ""):
+        raise RuntimeError("make_shorts produced no video stream")
 
 
 def layout(segs: list[Seg], binfo: dict, song_start: float) -> float:
@@ -535,7 +539,7 @@ def auto_plan(song: Path, clips: Path, target: float, binfo: dict,
     wins = []
     for f in files:
         wins += dialogue_windows(f, _words_for(str(f), wmap))
-    total_beats = max(16, int(round(target / period)))
+    total_beats = max(12, min(20, int(round(min(target, 24.0) / period))))
     dlg_budget = int(total_beats * 0.6)
     chosen = []
     for w in sorted(wins, key=lambda x: -x["score"]):
