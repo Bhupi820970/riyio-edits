@@ -357,12 +357,18 @@ def composite(base: Path, events: list[dict], W: int, H: int, audio: Path, out: 
             img = e["img"]
             im.alpha_composite(img, (max(0, e["x"]), max(0, e["y"])))
         im = apply_riyio_logo(im, fpath)
-        enc.stdin.write(im.convert("RGB").tobytes())
-    enc.stdin.close()
+        try:
+            enc.stdin.write(im.convert("RGB").tobytes())
+        except BrokenPipeError:
+            break
+    try:
+        enc.stdin.close()
+    except Exception:
+        pass
     enc.wait()
     dec.kill()
     dec.wait()
-    if enc.returncode:
+    if enc.returncode not in (0, None, -32):
         raise RuntimeError("encode failed")
 
 
