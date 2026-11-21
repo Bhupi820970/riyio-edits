@@ -110,9 +110,9 @@ def whisper_words(path: Path) -> tuple[str, list[dict]]:
     return full, words
 
 
-def gather_clips(genre: str, topic: str, used_ids: set[str], want_total: float = 60.0,
-                 max_clips: int = 3, max_tries: int = 9) -> list[dict]:
-    """Collect clean, genre-matched 20-45s clips (unique footage, no loops)."""
+def gather_clips(genre: str, topic: str, used_ids: set[str], want_total: float = 90.0,
+                 max_clips: int = 6, max_tries: int = 12) -> list[dict]:
+    """Collect clean, genre-matched 20-45s clips from DIFFERENT videos (unique footage, no loops)."""
     cands: list[dict] = []
     for link in load_clip_links(genre=genre):
         vid = youtube_id(link) or link.rstrip("/").split("/")[-1]
@@ -121,7 +121,7 @@ def gather_clips(genre: str, topic: str, used_ids: set[str], want_total: float =
                           "via": "rapidapi" if youtube_id(link) else "yt-dlp"})
     if rapid_available():
         seen = set()
-        for q in search_queries_for(genre, topic)[:2]:
+        for q in search_queries_for(genre, topic)[:3]:
             try:
                 res = rapid_search(q)
             except Exception as e:
@@ -206,12 +206,12 @@ def main():
     _run(["ffmpeg", "-y", "-v", "error", "-i", str(song_mp3), "-ac", "2", "-ar", "48000", str(song_wav)])
     print("AUDIO SOURCE: songs-bank/" + song_entry["file"], "|", credit)
 
-    # Clips: clean, >=20s, total >=60s so no shot is ever looped.
+    # Clips: clean, >=20s, total >=60s so no shot is ever looped. More clips = more distinct scenes.
     shutil.rmtree("clips", ignore_errors=True)
     Path("clips").mkdir()
     clips = gather_clips(genre, topic, used_ids)
     total = sum(c["dur"] for c in clips)
-    print(f"CLIPS: {len(clips)} accepted, {total:.1f}s unique footage: "
+    print(f"CLIPS: {len(clips)} accepted, {total:.1f}s unique footage from different videos: "
           + ", ".join(f"{c['path'].name}={c['dur']:.1f}s" for c in clips))
     if not clips or total < 38:
         raise SystemExit(f"NOT ENOUGH CLEAN FOOTAGE ({total:.1f}s) — refusing to loop short clips")
