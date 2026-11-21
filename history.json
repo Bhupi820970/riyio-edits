@@ -8,7 +8,8 @@
     "movies_10_6291",
     "movies_11_1538",
     "romance_12_1173",
-    "movies_13_7841"
+    "movies_13_7841",
+    "series_14_3063"
   ],
   "source_ids": [
     "2123801040210518476",
@@ -18,7 +19,9 @@
     "2123818493107896718",
     "MYIlirRPSEM",
     "TlyMGOip5-Y",
-    "jbNHRmBJMP4"
+    "jbNHRmBJMP4",
+    "UVrrZZPAkvY",
+    "dYvr9RPfxlM"
   ],
   "used_patterns": [
     "P01",
@@ -26,12 +29,14 @@
     "P03",
     "P04",
     "P05",
-    "P06"
+    "P06",
+    "P01"
   ],
   "songs": [
     "epic_7.mp3",
     "epic_6.mp3",
     "aggressive_1.mp3",
-    "epic_9.mp3"
+    "epic_9.mp3",
+    "emotional_4.mp3"
   ]
 }
