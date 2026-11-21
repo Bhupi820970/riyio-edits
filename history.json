@@ -15,7 +15,8 @@
     "sports_17_1313",
     "racing_18_5087",
     "movies_19_4822",
-    "motivation_20_1574"
+    "motivation_20_1574",
+    "sports_21_9243"
   ],
   "source_ids": [
     "2123801040210518476",
@@ -33,7 +34,8 @@
     "E4vj3-yc8XM",
     "07rwVa8Hb84",
     "onVhbeY7nLM",
-    "r4JdlGjJFQk"
+    "r4JdlGjJFQk",
+    "dfGYZMXUvnQ"
   ],
   "used_patterns": [
     "P01",
@@ -56,6 +58,7 @@
     "emotional_8.mp3",
     "aggressive_2.mp3",
     "epic_1.mp3",
-    "dark_4.mp3"
+    "dark_4.mp3",
+    "dark_5.mp3"
   ]
 }
