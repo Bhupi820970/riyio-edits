@@ -5,8 +5,10 @@ from pathlib import Path
 
 try:
     from google import genai
+    from google.genai import types
 except ImportError:
     genai = None
+    types = None
 
 KEYS = [os.environ.get("GEMINI_API_KEY_1"), os.environ.get("GEMINI_API_KEY_2"), os.environ.get("GEMINI_API_KEY")]
 KEYS = [k for k in KEYS if k]
@@ -27,6 +29,7 @@ PROMPT = '''Analyze this movie/series/sports clip. Return ONLY valid JSON:
 }
 Rules:
 - reject=true if ANY OTT logo, watermark, or hardcoded subtitle is visible.
+- dialogue_start must be >= 15.0 if the clip is longer than 60s (skip YouTube intros / "Subscribe" / "Available in 4K" cards).
 - dialogue_start/end: 15-22 seconds of highest-emotion punchy dialogue.
 - action_cuts: exactly 5-6 timestamps of high-action or close-up shots.
 - mood: one of "dark_hype", "epic_cinematic", "emotional_romance", "cold_sigma".
@@ -79,29 +82,75 @@ def analyze(video_360p: Path) -> dict:
     raise RuntimeError(f"Gemini failed: {last}")
 
 
-def qc_inspect(video_360p: Path) -> dict:
-    """Pass 2: inspect rendered draft."""
-    try:
-        client, model = _client()
-        f = client.files.upload(file=str(video_360p))
-        for _ in range(40):
-            state = getattr(getattr(f, "state", None), "name", "")
-            if state == "ACTIVE":
-                break
-            time.sleep(2)
-            f = client.files.get(name=f.name)
-        prompt = """Inspect this rendered short. Return ONLY JSON:
+QC_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"] + [m for m in MODELS if not m.startswith("gemini-2.5")]
+
+QC_PROMPT = """You are a strict QC inspector for a 4:5 short-form edit. Intended structure:
+1) Dialogue part: a movie/series/anime/sports scene with its original dialogue, word-by-word captions
+   in the lower-center, a white hook bar at the top during the first 6 seconds, RIYIO watermark at bottom.
+2) At the end of the dialogue: a short white flash (beat drop), then 5-6 rapid action cuts (0.5-0.8s each)
+   with music only and no captions.
+Check strictly for: YouTube intros / "Subscribe" / "Available in 4K" cards, missing or out-of-sync captions
+during the dialogue, black-screen frames (a single white flash frame is intended), broken or missing beat drop.
+Return ONLY JSON:
 {"pass": true, "issues": [], "trim_start": 0.0, "trim_end": 0.0, "retry_new_clip": false}
-Fail if: YouTube intro/subscribe, missing captions, black screen, broken beat drop."""
-        resp = client.models.generate_content(
-            model=model,
-            contents=[types.Part.from_uri(f.uri, "video/mp4"), prompt],
-            config=types.GenerateContentConfig(temperature=0.2, response_mime_type="application/json"),
-        )
-        text = (resp.text or "").strip()
-        if text.startswith("```"):
-            text = text.split("\n", 1)[-1].rsplit("```", 1)[0]
-        return json.loads(text)
-    except Exception as e:
-        print("QC error", e, flush=True)
-        return {"pass": True, "issues": [str(e)], "retry_new_clip": False}
+trim_start / trim_end = seconds to cut from the start / end if a problem sits only at an edge.
+retry_new_clip = true if the source clip itself is unusable."""
+
+
+def _parse_json(text: str):
+    text = (text or "").strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[-1].rsplit("```", 1)[0]
+    data = json.loads(text.strip())
+    if isinstance(data, list):
+        data = data[0] if data else {}
+    return data
+
+
+def qc_inspect(video_360p: Path) -> dict:
+    """Pass 2: inspect rendered draft (360p). Returns normalized verdict; qc_error set if Gemini unreachable."""
+    if not available():
+        return {"pass": False, "issues": ["gemini unavailable"], "qc_error": "Gemini keys or google-genai missing"}
+    last = None
+    for key in KEYS:
+        try:
+            client = genai.Client(api_key=key)
+            f = client.files.upload(file=str(video_360p))
+            for _ in range(60):
+                state = getattr(getattr(f, "state", None), "name", "")
+                if state == "ACTIVE":
+                    break
+                if state == "FAILED":
+                    raise RuntimeError("Gemini file processing failed")
+                time.sleep(3)
+                f = client.files.get(name=f.name)
+        except Exception as e:
+            last = e
+            print("QC upload error", repr(e)[:200], flush=True)
+            continue
+        for model in QC_MODELS:
+            try:
+                resp = client.models.generate_content(
+                    model=model,
+                    contents=[f, QC_PROMPT],
+                    config=types.GenerateContentConfig(temperature=0.2, response_mime_type="application/json"),
+                )
+                data = _parse_json(resp.text)
+                verdict = {
+                    "pass": bool(data.get("pass")) if not isinstance(data.get("pass"), str) else data.get("pass").lower() == "true",
+                    "issues": list(data.get("issues") or []),
+                    "trim_start": float(data.get("trim_start") or 0.0),
+                    "trim_end": float(data.get("trim_end") or 0.0),
+                    "retry_new_clip": bool(data.get("retry_new_clip")),
+                    "model": model,
+                }
+                try:
+                    client.files.delete(name=f.name)
+                except Exception:
+                    pass
+                return verdict
+            except Exception as e:
+                last = e
+                print(f"QC {model} error", repr(e)[:200], flush=True)
+                continue
+    return {"pass": False, "issues": [str(last)[:300]], "qc_error": str(last)[:300]}

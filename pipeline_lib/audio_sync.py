@@ -17,15 +17,28 @@ def detect_beats(song: Path) -> dict:
     except Exception:
         return {"tempo": 120.0, "beats": [i * 0.5 for i in range(80)], "drop": 12.0}
 
-def whisper_words(clip: Path) -> list[dict]:
-    try:
+_MODEL = None
+
+
+def _model():
+    global _MODEL
+    if _MODEL is None:
         from faster_whisper import WhisperModel
-        model = WhisperModel("base.en", device="cpu", compute_type="int8")
-        segments, _ = model.transcribe(str(clip), word_timestamps=True)
+        _MODEL = WhisperModel("base.en", device="cpu", compute_type="int8")
+    return _MODEL
+
+
+def whisper_words(clip: Path) -> list[dict]:
+    """Word-level timestamps (seconds, relative to clip start)."""
+    try:
+        segments, _ = _model().transcribe(str(clip), word_timestamps=True)
         words = []
         for seg in segments:
             for w in (seg.words or []):
-                words.append({"word": w.word.strip(), "s": float(w.start), "e": float(w.end)})
+                txt = (w.word or "").strip()
+                if txt:
+                    words.append({"word": txt, "s": float(w.start), "e": float(w.end)})
         return words
-    except Exception:
+    except Exception as e:
+        print("WHISPER error:", repr(e)[:300], flush=True)
         return []

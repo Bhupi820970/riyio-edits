@@ -106,7 +106,7 @@ def rapid_download(url: str, out: Path, fmt: str = "1080") -> dict:
         raise RapidAPIError("file fetch failed")
     return {"title": job.get("title") or "", "id": job.get("id") or "", "path": str(out)}
 
-def search_and_download(query: str, out: Path) -> dict | None:
+def search_and_download(query: str, out: Path, exclude: set | None = None) -> dict | None:
     print("RapidAPI search:", query[:50])
     try:
         results = rapid_search(query)
@@ -118,11 +118,15 @@ def search_and_download(query: str, out: Path) -> dict | None:
         if is_blacklisted(it["title"], it["channel"]):
             print("skip", it["title"][:40])
             continue
+        if exclude and it["url"] in exclude:
+            print("skip used", it["title"][:40])
+            continue
         for fmt in ("1080", "720", "mp4", "best"):
             try:
                 info = rapid_download(it["url"], out, fmt=fmt)
                 info["title"] = it["title"]
                 info["channel"] = it["channel"]
+                info["url"] = it["url"]
                 print("DOWNLOADED", fmt, out.stat().st_size)
                 return info
             except Exception as e:

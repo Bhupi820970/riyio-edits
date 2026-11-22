@@ -46,4 +46,6 @@ jobs:
             out_remotion.mp4
             remotion-props.json
             plan.json
+            qc.json
+            draft360.mp4
           if-no-files-found: ignore
