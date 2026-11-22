@@ -1,5 +1,7 @@
-import traceback
 """riyio-v2 full: RapidAPI -> Gemini -> cuts -> Remotion props -> FFmpeg fallback."""
+from __future__ import annotations
+import traceback
+
 from __future__ import annotations
 import json, os, subprocess
 from pathlib import Path
