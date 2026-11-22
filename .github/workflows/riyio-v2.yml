@@ -19,7 +19,7 @@ jobs:
       - name: System deps
         run: sudo apt-get update && sudo apt-get install -y ffmpeg chromium-browser || sudo apt-get install -y ffmpeg chromium
       - name: Python deps
-        run: pip install google-genai librosa faster-whisper requests
+        run: pip install google-genai yt-dlp librosa faster-whisper requests
       - name: Remotion deps
         working-directory: remotion
         run: npm install
