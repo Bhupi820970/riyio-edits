@@ -76,7 +76,7 @@ def rapid_search(query: str) -> list[dict]:
         out.append({"id": vid, "title": v.get("title") or "", "url": link, "channel": ch or ""})
     return out
 
-def rapid_download(url: str, out: Path, fmt: str = "mp4") -> dict:
+def rapid_download(url: str, out: Path, fmt: str = "1080") -> dict:
     params = {"url": url, "format": fmt, "max_duration": "12"}
     if fmt == "mp3":
         params["audio_quality"] = "192"
@@ -118,15 +118,16 @@ def search_and_download(query: str, out: Path) -> dict | None:
         if is_blacklisted(it["title"], it["channel"]):
             print("skip", it["title"][:40])
             continue
-        try:
-            info = rapid_download(it["url"], out)
-            info["title"] = it["title"]
-            info["channel"] = it["channel"]
-            print("DOWNLOADED", out.stat().st_size)
-            return info
-        except Exception as e:
-            print("dl fail", e)
-            continue
+        for fmt in ("1080", "720", "mp4", "best"):
+            try:
+                info = rapid_download(it["url"], out, fmt=fmt)
+                info["title"] = it["title"]
+                info["channel"] = it["channel"]
+                print("DOWNLOADED", fmt, out.stat().st_size)
+                return info
+            except Exception as e:
+                print(f"dl fail {fmt}", e)
+                continue
     return None
 
 def pick_or_download_song(mood: str, songs_dir: Path, out: Path) -> Path | None:
