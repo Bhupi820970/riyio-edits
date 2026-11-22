@@ -17,6 +17,17 @@ def run(cmd):
         raise RuntimeError((r.stderr or "")[-700:])
     return r
 
+
+def probe_duration(path):
+    r = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", str(path)],
+        capture_output=True, text=True,
+    )
+    try:
+        return float(r.stdout.strip())
+    except Exception:
+        return 60.0
+
 def main():
     demo = os.environ.get("DEMO_ONLY", "false").lower() in ("1", "true", "yes")
     query = os.environ.get("QUERY", "Game of Thrones iconic scene 4K no subtitles")
@@ -43,16 +54,32 @@ def main():
         raise SystemExit("Rejected")
     Path("plan.json").write_text(json.dumps(plan, indent=2))
 
-    # cut dialogue from original
-    ds, de = float(plan["dialogue_start"]), float(plan["dialogue_end"])
+    # cut dialogue from original (sanitized)
+    print("[3] FFmpeg cuts", flush=True)
+    dur = probe_duration(src)
+    print("source duration", dur, flush=True)
+    ds = float(plan.get("dialogue_start", 8) or 8)
+    de = float(plan.get("dialogue_end", 24) or 24)
+    ds = max(0.0, min(ds, max(0, dur - 12)))
+    if de <= ds + 3:
+        de = min(dur, ds + 18)
+    de = min(de, dur)
     dlg = Path("clips/dialogue.mp4")
-    run(["ffmpeg", "-y", "-ss", str(max(0, ds)), "-to", str(de), "-i", str(src), "-c", "copy", str(dlg)])
+    run(["ffmpeg", "-y", "-ss", f"{ds:.2f}", "-t", f"{de-ds:.2f}", "-i", str(src), "-c", "copy", str(dlg)])
 
-    # cut action clips
+    # cut action clips (sanitized)
     action_paths = []
     for i, t in enumerate(plan.get("action_cuts", [])[:6]):
+        try:
+            start = float(t)
+        except Exception:
+            continue
+        start = max(0.0, min(start, max(0, dur - 2)))
+        clip_dur = max(0.6, min(1.5, 0.8))
+        if start + clip_dur > dur:
+            start = max(0, dur - clip_dur)
         ap = Path(f"clips/action_{i}.mp4")
-        run(["ffmpeg", "-y", "-ss", str(max(0, float(t))), "-t", "0.8", "-i", str(src), "-c", "copy", str(ap)])
+        run(["ffmpeg", "-y", "-ss", f"{start:.2f}", "-t", f"{clip_dur:.2f}", "-i", str(src), "-c", "copy", str(ap)])
         action_paths.append(str(ap))
 
     words = whisper_words(dlg)
