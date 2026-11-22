@@ -55,3 +55,17 @@ def whisper_words(clip: Path, language: str = "en") -> list[dict]:
     except Exception as e:
         print("WHISPER error:", repr(e)[:300], flush=True)
         return []
+
+
+def audible_start(song: Path, max_s: float = 40.0) -> float:
+    """First moment the track is clearly audible (skip near-silent intros so the bed is never silent)."""
+    try:
+        import librosa
+        import numpy as np
+        y, sr = librosa.load(str(song), sr=22050, mono=True, duration=max_s + 30)
+        rms = librosa.feature.rms(y=y, frame_length=2048, hop_length=512)[0]
+        thr = 0.3 * float(np.percentile(rms, 95))
+        idx = int(np.argmax(rms > thr)) if np.any(rms > thr) else 0
+        return float(min(max_s, librosa.frames_to_time(idx, sr=sr, hop_length=512)))
+    except Exception:
+        return 0.0

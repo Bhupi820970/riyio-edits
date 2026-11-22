@@ -33,3 +33,13 @@ BiBi rules: length 35s-60s; English captions synced to lips; best quality; Gemin
 - No crop of the 16:9 source: blurred darkened fill top/bottom; white top hook banner with black bold title for the whole video.
 - Montage: same show/character, 0.3-0.8s cuts on kicks, flash + zoom punch + slight RGB split + whoosh/hit SFX (self-generated only), no captions; end card glow "MADE BY RIYIO" + small RIYIO watermark.
 - Reference videos are not committed (kept on the box at /workspace/riyio-ref/).
+
+## Updates (Nov 22 2026, BiBi after the Gladiator demo) — these override the lines above
+- Music never stops: the dark bed plays under the whole dialogue at about -11 dB (loudness-normalised, silent intros skipped), then the drop plays at 0 dB to the end.
+- The drop lands exactly on the punch word (whisper word timestamps). When the punch word ends the dialogue stops and the video cuts straight into the montage (5-6+ cuts, no dead air).
+- At most ~1s before the first spoken word; silent lead-in is trimmed. Total still 35-60s.
+- NO end card ("MADE BY RIYIO" removed) and no cursive corner watermark.
+- Watermark: "RIYIO" inside the movie picture, bottom-center, about 5-6% above the picture's bottom edge; small bold condensed sans (Anton, the same font as pro-edit's VICE CARTEL mark), text width ~7% of the frame width, white ~65% opacity, no glow (very faint shadow). Shown the whole video.
+- Captions: speaker-side styles from pro-edit (caption_patterns.py P01-P15: beside the speaker, away from the face, never covering faces, Anton, black outline + hard shadow, 80%->100% pop, small white fillers, coloured key words) plus R00 = the reference serif glow look. Placement from YuNet face detection per caption; word-by-word reveal for lip sync. Styles rotate across videos, picked per mood.
+- Genres rotate: movies, web series, games (official cinematics/cutscenes), sports (F1 team radio/overtakes, football commentary), anime (English dub), cartoons/animated films. Sports/games may use English commentary/team radio as dialogue (>= 5 words).
+- Fonts are bundled in remotion/public/fonts (Anton, Playfair Display; SIL OFL).

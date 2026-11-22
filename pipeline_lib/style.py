@@ -55,7 +55,7 @@ def find_punch(words: list[dict], punch_word: str, punch_rel: float | None) -> i
     return len(words) - 1
 
 
-def group_captions(words: list[dict], punch_idx: int, end_s: float) -> list[dict]:
+def group_captions(words: list[dict], punch_idx: int, end_s: float, max_words: int = 4) -> list[dict]:
     """1-4 word caption groups synced to whisper word timestamps."""
     groups, cur = [], []
     for i, w in enumerate(words):
@@ -64,7 +64,7 @@ def group_captions(words: list[dict], punch_idx: int, end_s: float) -> list[dict
         if cur:
             prev = words[i - 1]
             chars = sum(len(x["word"]) for x in cur)
-            if (len(cur) >= 4 or chars >= 18 or w["s"] - prev["e"] > 0.35
+            if (len(cur) >= max_words or chars >= 18 or w["s"] - prev["e"] > 0.35
                     or re.search(r"[.,?!;:]$", prev["word"]) or i == punch_idx):
                 groups.append(cur)
                 cur = []
@@ -94,6 +94,7 @@ def group_captions(words: list[dict], punch_idx: int, end_s: float) -> list[dict
         out.append({
             "start": round(start, 3), "end": round(max(end, start + 0.2), 3),
             "words": [{"w": x["word"], "s": round(x["s"], 3), "e": round(x["e"], 3)} for x in g],
+            "raw": g,
             "color": ACCENTS[gi % len(ACCENTS)], "italic": bool(italic), "key": key,
             "stroke": stroke, "punch": bool(is_punch),
         })

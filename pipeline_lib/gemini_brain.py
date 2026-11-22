@@ -16,7 +16,7 @@ KEYS = [k for k in KEYS if k]
 MODELS = ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.8-flash-lite", "gemini-2.0-flash"]
 QC_MODELS = MODELS
 
-PROMPT = '''You are the director of a RIYIO cinematic short (vertical 4:5, 35-60s total).
+PROMPT = '''You are the director of a RIYIO cinematic short (vertical 4:5, 35-60s total). Genre: {genre}.
 Watch this source clip (360p preview, timestamps in seconds) and return ONLY valid JSON with these keys:
 {
   "reject": <bool>,
@@ -35,7 +35,10 @@ Watch this source clip (360p preview, timestamps in seconds) and return ONLY val
 }
 Rules:
 - reject=true if the spoken dialogue is not English, if an OTT logo / channel watermark / burned-in subtitles
-  are visible, or if the clip is a fan edit, compilation, reaction, review, trailer or music-only video.
+  are visible, or if the clip is a fan edit, compilation, reaction, review, movie trailer or music-only video.
+  Genre notes: games = official game cinematics / cutscenes (allowed); sports = F1 team radio / onboard or
+  football broadcast moments where English commentary or team radio counts as the dialogue (at least 5 words);
+  anime = English dub only; cartoons = animated films / series in English.
 - Pick the single most iconic, highest-tension CONTINUOUS English dialogue exchange. The dialogue window
   (dialogue_start..dialogue_end) must be 30-46 seconds long, start about 1 second before the first line,
   and end right after the punch word. Never choose dialogue_start < 15.0 if the clip is longer than 60s
@@ -114,25 +117,29 @@ def _ask(video: Path, prompt: str, models: list[str], tag: str) -> tuple[dict, s
     raise RuntimeError(f"{tag} failed: {str(last)[:300]}")
 
 
-def analyze(video_360p: Path) -> dict:
+def analyze(video_360p: Path, genre: str = "movies") -> dict:
     """Pass 1: director."""
     if not available():
         raise RuntimeError("Gemini keys or google-genai missing")
-    data, model = _ask(video_360p, PROMPT, MODELS, "GEMINI")
+    data, model = _ask(video_360p, PROMPT.replace("{genre}", genre), MODELS, "GEMINI")
     data["director_model"] = model
     return data
 
 
 QC_PROMPT = """You are a strict QC inspector for a RIYIO 4:5 cinematic short. Intended structure:
-1) Dialogue part (75-90% of runtime): one English movie/series scene with original dialogue, framed without crop
-   (blurred darkened fill above/below), a white top banner with black title text, and 1-4 word serif captions
-   in the middle of the frame synced to the spoken words (first caption is a hook question).
-2) Beat drop on the punch word: white flash, then a rapid montage (0.3-0.8s cuts) of the same show, music only,
-   no captions. 3) A short end card with glowing "MADE BY RIYIO".
+1) Dialogue part (75-90% of runtime): one English scene (movie/series/game cutscene/anime dub/cartoon, or sports
+   commentary / team radio) with original dialogue, framed without crop (blurred darkened fill above/below),
+   a white top banner with black title text, 1-4 word captions placed BESIDE the speaking character (not
+   covering faces) and revealed word by word in sync with the speech (first caption is a hook question).
+   A dark music bed is audible under the dialogue the whole time.
+2) The music drop hits exactly on the last punch word (white flash), the dialogue stops and the video cuts
+   straight into a rapid montage (0.3-0.8s cuts, 5+ cuts) of the same show, music at full level, no captions.
+   There is NO end card. A small white "RIYIO" watermark sits inside the movie picture, bottom-center.
 Measured facts from the pipeline: {facts}
-Fail if ANY: YouTube intro / "Subscribe" / "Available in 4K" card; spoken language not English; captions missing
-or clearly out of sync with the speech; black frames (outside the dark end card); no beat drop / montage;
-total length outside 35-60 seconds.
+Fail if ANY: YouTube intro / "Subscribe" / "Available in 4K" card; more than ~1s before the first spoken word;
+spoken language not English; captions missing, covering a face, or clearly out of sync with the speech;
+black frames; music not audible at some point; drop not on the punch word or dead air before the montage;
+an end card; watermark missing or on the black/blurred bars; total length outside 35-60 seconds.
 Return ONLY JSON:
 {{"pass": true, "issues": [], "trim_start": 0.0, "trim_end": 0.0, "retry_new_clip": false}}
 trim_start / trim_end = seconds to cut from the start / end only if a problem sits at an edge.

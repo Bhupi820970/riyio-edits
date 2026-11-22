@@ -1,9 +1,9 @@
 import {Composition, CalculateMetadataFunction} from 'remotion';
 import {JuraijEdit, JuraijProps} from './JuraijEdit';
 
-// Total length = exact sum of dialogue + montage + end card frames (computed by run_v2.py from ffprobe).
+// Total length = exact sum of dialogue + montage frames (no end card) (computed by run_v2.py from ffprobe).
 const calculateMetadata: CalculateMetadataFunction<JuraijProps> = ({props}) => {
-  const sum = (props.dialogueFrames || 0) + (props.actionFrames || []).reduce((a, b) => a + b, 0) + (props.endFrames || 0);
+  const sum = (props.dialogueFrames || 0) + (props.actionFrames || []).reduce((a, b) => a + b, 0) ;
   return {durationInFrames: Math.max(1, props.durationInFrames || sum)};
 };
 
@@ -25,12 +25,14 @@ export const RemotionRoot: React.FC = () => {
         dropFrame: 0,
         actionClips: [],
         actionFrames: [],
-        endFrames: 60,
         captions: [],
+        captionFont: "anton",
+        captionLook: "shadow",
         bedSrc: "",
         bedVolume: 0.28,
         dropSrc: "",
-        dropTrimBefore: 0,
+        picture: {x: 0, y: 0, w: 1080, h: 1350},
+        wmSize: 40,
         hitSrc: "",
         whooshSrc: "",
         durationInFrames: 0,

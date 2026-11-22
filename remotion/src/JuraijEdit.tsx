@@ -1,30 +1,48 @@
 import React from 'react';
-import {AbsoluteFill, Audio, OffthreadVideo, Sequence, staticFile, useCurrentFrame, useVideoConfig, spring, interpolate} from 'remotion';
+import {AbsoluteFill, Audio, OffthreadVideo, Sequence, staticFile, useCurrentFrame, useVideoConfig, spring, interpolate, delayRender, continueRender} from 'remotion';
 
 // RIYIO reference style — see docs/REFERENCE_STYLE.md
-type CapWord = {w: string; s: number; e: number};
-type Caption = {start: number; end: number; words: CapWord[]; color: string; italic: boolean; key: number; stroke: number; punch: boolean};
+// Captions: speaker-side styles adapted from pro-edit (caption_patterns.py P01-P15 + vicestyle.py) and R00 glow.
+
+type CapWord = {t: string; c: string; size: number; s: number};
+type CapLine = {h: number; sp: number; words: CapWord[]};
+type CapEvent = {start: number; end: number; x: number; y: number; w: number; h: number; pad: number;
+  align: 'left' | 'right' | 'center'; zone: string; punch: boolean; lines: CapLine[]};
+type Rect = {x: number; y: number; w: number; h: number};
 export type JuraijProps = {
   hook: string;            // white top banner title (whole video)
   hookQuestion: string;    // first caption at 0s
   dialogueSrc: string;
-  dialogueFrames: number;  // phase 1 length (ends on the first kick after the punch word)
+  dialogueFrames: number;  // phase 1 ends when the punch word ends (character goes quiet)
   dropFrame: number;       // punch word start = beat drop
   actionClips: string[];
   actionFrames: number[];
-  endFrames: number;
-  captions: Caption[];
+  captions: CapEvent[];
+  captionFont: 'anton' | 'playfair';
+  captionLook: 'shadow' | 'glow';
   bedSrc: string;
   bedVolume: number;
   dropSrc: string;
-  dropTrimBefore: number;
   hitSrc: string;
   whooshSrc: string;
+  picture: Rect;           // movie picture inside the 4:5 frame
+  wmSize: number;
   durationInFrames: number;
 };
 
-const SERIF = '"Playfair Display", "P052", "Liberation Serif", "Nimbus Roman", "Times New Roman", serif';
-const CURSIVE = '"Z003", "URW Chancery L", "Brush Script MT", cursive';
+// Bundled OFL fonts (remotion/public/fonts) so the runner always has them.
+const FONT_FACES: [string, string, FontFaceDescriptors][] = [
+  ['RiyioAnton', 'fonts/Anton-Regular.ttf', {weight: '400'}],
+  ['RiyioPlayfair', 'fonts/PlayfairDisplay.ttf', {weight: '400 900'}],
+  ['RiyioPlayfair', 'fonts/PlayfairDisplay-Italic.ttf', {weight: '400 900', style: 'italic'}],
+];
+if (typeof document !== 'undefined') {
+  const handle = delayRender('riyio-fonts');
+  Promise.all(FONT_FACES.map(([fam, file, desc]) => new FontFace(fam, `url('${staticFile(file)}')`, desc).load()))
+    .then((faces) => { faces.forEach((f) => (document.fonts as unknown as {add: (x: FontFace) => void}).add(f)); continueRender(handle); })
+    .catch((e) => { console.error('font load failed', e); continueRender(handle); });
+}
+const FONT = {anton: '"RiyioAnton", "Anton", Impact, sans-serif', playfair: '"RiyioPlayfair", "Playfair Display", "P052", serif'};
 
 const ActionClip: React.FC<{src: string}> = ({src}) => {
   const frame = useCurrentFrame();
@@ -38,34 +56,35 @@ const ActionClip: React.FC<{src: string}> = ({src}) => {
   );
 };
 
-const CaptionView: React.FC<{c: Caption; t: number; frame: number; fps: number}> = ({c, t, frame, fps}) => {
-  const startF = Math.round(c.start * fps);
-  const pop = spring({frame: frame - startF, fps, config: {damping: 12, stiffness: 260}, durationInFrames: 6});
-  const scale = 1.2 - 0.2 * pop;
-  const glow = `0 0 15px ${c.color}, 0 0 4px ${c.color}, 0 4px 10px rgba(0,0,0,0.95), 0 1px 2px #000`;
-  const shake = c.punch ? `translate(${Math.sin(frame * 2.3) * 5}px, ${Math.cos(frame * 3.1) * 4}px)` : '';
+const Caption: React.FC<{ev: CapEvent; t: number; frame: number; fps: number; font: string; look: string}> = ({ev, t, frame, fps, font, look}) => {
+  const f0 = Math.round(ev.start * fps);
+  const glow = look === 'glow';
+  // pro-edit pop 80% -> 100% (shadow looks); reference glow pops 1.2 -> 1.0
+  const pop = spring({frame: frame - f0, fps, config: {damping: 13, stiffness: 280}, durationInFrames: glow ? 6 : 5});
+  const scale = glow ? 1.2 - 0.2 * pop : 0.8 + 0.2 * pop;
+  const shake = ev.punch ? `translate(${Math.sin(frame * 2.3) * 5}px, ${Math.cos(frame * 3.1) * 4}px)` : '';
+  const origin = ev.align === 'left' ? 'left center' : ev.align === 'right' ? 'right center' : 'center';
   return (
-    <div style={{
-      position: 'absolute', top: '52%', left: 50, right: 50, textAlign: 'center',
-      transform: `scale(${scale}) ${shake}`, zIndex: 25, lineHeight: 1.1,
-      fontFamily: SERIF, fontWeight: 800, fontSize: c.punch ? 104 : 60, letterSpacing: 1.5,
-      fontStyle: c.italic ? 'italic' : 'normal',
-    }}>
-      {c.words.map((w, i) => {
-        const spoken = t >= w.s - 0.04;
-        const isKey = i === c.key && c.words.length > 1;
-        const isStroke = i === c.stroke;
-        const text = c.italic ? w.w : w.w.toUpperCase();
-        return (
-          <span key={i} style={{
-            opacity: spoken ? 1 : 0,
-            color: isStroke ? 'transparent' : (c.punch ? '#F43F5E' : isKey ? c.color : '#FFFFFF'),
-            WebkitTextStroke: isStroke ? '2.5px #EF4444' : undefined,
-            textShadow: isStroke ? '0 0 12px rgba(239,68,68,0.8)' : glow,
-            marginRight: 16, display: 'inline-block',
-          }}>{text}</span>
-        );
-      })}
+    <div style={{position: 'absolute', left: ev.x, top: ev.y, width: ev.w, height: ev.h, padding: ev.pad, boxSizing: 'border-box',
+      transform: `scale(${scale}) ${shake}`, transformOrigin: origin, zIndex: 25,
+      display: 'flex', flexDirection: 'column', gap: 6, justifyContent: 'center'}}>
+      {ev.lines.map((ln, li) => (
+        <div key={li} style={{display: 'flex', alignItems: 'baseline', gap: ln.sp, height: ln.h,
+          justifyContent: ev.align === 'left' ? 'flex-start' : ev.align === 'right' ? 'flex-end' : 'center'}}>
+          {ln.words.map((w, wi) => {
+            const spoken = t >= w.s - 0.04; // word-level reveal = lip sync
+            const off = Math.max(3, Math.round(w.size / 16));
+            const style: React.CSSProperties = glow
+              ? {color: w.c, textShadow: `0 0 15px ${w.c}, 0 0 5px ${w.c}, 0 4px 10px rgba(0,0,0,0.95)`, fontWeight: 800}
+              : {color: w.c, WebkitTextStroke: `${Math.max(2, Math.round(w.size / 28))}px #000`, paintOrder: 'stroke fill',
+                 textShadow: `${off}px ${off}px 0 rgba(0,0,0,0.92)`};
+            return (
+              <span key={wi} style={{...style, fontFamily: font, fontSize: w.size, lineHeight: 1, whiteSpace: 'nowrap',
+                opacity: spoken ? 1 : 0}}>{w.t}</span>
+            );
+          })}
+        </div>
+      ))}
     </div>
   );
 };
@@ -75,9 +94,10 @@ export const JuraijEdit: React.FC<JuraijProps> = (p) => {
   const {fps, durationInFrames} = useVideoConfig();
   const t = frame / fps;
   const D = p.dialogueFrames;
-  const flashLen = 4;
+  const font = FONT[p.captionFont] || FONT.anton;
+  const pic = p.picture || {x: 0, y: 0, w: 1080, h: 1350};
 
-  // montage cut layout right after phase 1
+  // montage cut layout right after phase 1 (no end card)
   let cursor = D;
   const seqs = p.actionClips.map((src, i) => {
     const len = Math.max(1, Math.round(p.actionFrames[i] || 0.45 * fps));
@@ -85,22 +105,13 @@ export const JuraijEdit: React.FC<JuraijProps> = (p) => {
     cursor += len;
     return {src, from, len};
   });
-  const endFrom = cursor;
   const inDialogue = frame < D;
-  const inEnd = frame >= endFrom;
 
-  // hook question = first caption at 0s
-  const firstCap = p.captions.length ? p.captions[0].start : 2;
-  const hqEnd = Math.min(2.6, Math.max(1.3, firstCap));
+  // hook question = first caption at 0s (until the first spoken word)
+  const firstCap = p.captions.length ? p.captions[0].start : 1;
+  const hqEnd = Math.min(1.0, Math.max(0.5, firstCap));
   const showHQ = t < hqEnd && !!p.hookQuestion;
-  const cap = inDialogue && !showHQ ? p.captions.find((c) => t >= c.start && t < c.end) : undefined;
-
-  // small cursive watermark fades in/out
-  const wmCycle = (frame % (8 * fps)) / fps;
-  const wmOpacity = interpolate(wmCycle, [0, 1, 4, 5, 8], [0, 0.55, 0.55, 0, 0], {extrapolateRight: 'clamp'});
-
-  const endF = frame - endFrom;
-  const endPop = spring({frame: endF, fps, config: {damping: 14}});
+  const cap = inDialogue ? p.captions.find((c) => t >= c.start && t < c.end) : undefined;
 
   return (
     <AbsoluteFill style={{backgroundColor: '#000'}}>
@@ -119,62 +130,50 @@ export const JuraijEdit: React.FC<JuraijProps> = (p) => {
       ))}
 
       {/* Drop flash on the punch word */}
-      {frame >= p.dropFrame && frame < p.dropFrame + flashLen && (
+      {frame >= p.dropFrame && frame < p.dropFrame + 4 && (
         <AbsoluteFill style={{backgroundColor: '#fff', zIndex: 30,
-          opacity: interpolate(frame - p.dropFrame, [0, flashLen], [1, 0])}} />
-      )}
-
-      {/* End card */}
-      {inEnd && (
-        <AbsoluteFill style={{backgroundColor: '#050505', alignItems: 'center', justifyContent: 'center', zIndex: 26}}>
-          <div style={{
-            fontFamily: SERIF, fontWeight: 800, fontSize: 84, color: '#fff', letterSpacing: 6,
-            textShadow: '0 0 18px #fff, 0 0 42px #38BDF8, 0 0 80px #38BDF8',
-            transform: `scale(${0.85 + 0.15 * endPop})`, opacity: endPop,
-          }}>MADE BY RIYIO</div>
-        </AbsoluteFill>
+          opacity: interpolate(frame - p.dropFrame, [0, 4], [1, 0])}} />
       )}
 
       {/* White top hook banner, black bold title — whole video */}
-      {!inEnd && (
-        <div style={{
-          position: 'absolute', top: 0, left: 0, right: 0, height: '10%', background: '#FFFFFF',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 20,
-        }}>
-          <span style={{color: '#000', fontSize: 54, fontWeight: 800, fontFamily: SERIF, padding: '0 30px', textAlign: 'center'}}>
-            “{p.hook}”
-          </span>
-        </div>
-      )}
+      <div style={{position: 'absolute', top: 0, left: 0, right: 0, height: '10%', background: '#FFFFFF',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 20}}>
+        <span style={{color: '#000', fontSize: 54, fontWeight: 800, fontFamily: FONT.playfair, padding: '0 30px', textAlign: 'center'}}>
+          “{p.hook}”
+        </span>
+      </div>
 
       {/* Hook question (first caption) */}
       {showHQ && (
-        <CaptionView c={{start: 0, end: hqEnd, words: p.hookQuestion.split(' ').map((w) => ({w, s: 0, e: hqEnd})),
-          color: '#F43F5E', italic: false, key: -1, stroke: -1, punch: false}} t={t} frame={frame} fps={fps} />
+        <div style={{position: 'absolute', left: 60, right: 60, top: pic.y + pic.h * 0.5 - 50, textAlign: 'center', zIndex: 25,
+          fontFamily: font, fontSize: 64, fontWeight: 800, color: '#fff', lineHeight: 1.05,
+          WebkitTextStroke: p.captionLook === 'glow' ? undefined : '2px #000', paintOrder: 'stroke fill',
+          textShadow: p.captionLook === 'glow' ? '0 0 15px #F43F5E, 0 4px 10px #000' : '4px 4px 0 rgba(0,0,0,0.92)'}}>
+          {p.hookQuestion.toUpperCase()}
+        </div>
       )}
 
-      {/* Word-synced captions (phase 1 only) */}
-      {cap ? <CaptionView c={cap} t={t} frame={frame} fps={fps} /> : null}
+      {/* Word-synced, speaker-side captions (phase 1 only) */}
+      {cap && !showHQ ? <Caption ev={cap} t={t} frame={frame} fps={fps} font={font} look={p.captionLook} /> : null}
 
-      {/* Small RIYIO watermark */}
-      {!inEnd && (
-        <div style={{
-          position: 'absolute', bottom: 70, right: 60, color: '#fff', fontSize: 40, fontFamily: CURSIVE,
-          opacity: wmOpacity, textShadow: '0 0 10px rgba(255,255,255,0.8)', zIndex: 15,
-        }}>Riyio</div>
-      )}
+      {/* RIYIO watermark INSIDE the picture: small bold condensed sans, white ~65%, bottom-center (VICE CARTEL look) */}
+      <div style={{position: 'absolute', left: pic.x, width: pic.w, top: pic.y + pic.h - pic.h * 0.055 - p.wmSize,
+        height: p.wmSize * 1.2, textAlign: 'center', zIndex: 18, fontFamily: FONT.anton, fontSize: p.wmSize,
+        lineHeight: 1.2, letterSpacing: 1, color: 'rgba(255,255,255,0.65)', textShadow: '1px 2px 3px rgba(0,0,0,0.25)'}}>
+        RIYIO
+      </div>
 
-      {/* Audio: dark bed ducked ~-11dB under dialogue -> drop at 0dB on the punch word */}
+      {/* Audio: dark bed ~-11 dB under the whole dialogue -> drop at 0 dB exactly on the punch word */}
       {p.bedSrc ? (
         <Sequence from={0} durationInFrames={Math.max(1, p.dropFrame + 3)}>
           <Audio src={staticFile(p.bedSrc)}
-            volume={(f) => p.bedVolume * interpolate(f, [0, 15, Math.max(16, p.dropFrame - 2), Math.max(17, p.dropFrame + 3)], [0, 1, 1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'})} />
+            volume={(f) => p.bedVolume * interpolate(f, [0, Math.max(1, p.dropFrame), Math.max(2, p.dropFrame + 3)], [1, 1, 0], {extrapolateRight: 'clamp'})} />
         </Sequence>
       ) : null}
       {p.dropSrc ? (
         <Sequence from={p.dropFrame}>
-          <Audio src={staticFile(p.dropSrc)} trimBefore={Math.max(0, p.dropTrimBefore)}
-            volume={(f) => interpolate(f + p.dropFrame, [durationInFrames - fps, durationInFrames], [1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'})} />
+          <Audio src={staticFile(p.dropSrc)}
+            volume={(f) => interpolate(f + p.dropFrame, [durationInFrames - 6, durationInFrames], [1, 0.6], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'})} />
         </Sequence>
       ) : null}
       {p.hitSrc ? (
@@ -187,11 +186,6 @@ export const JuraijEdit: React.FC<JuraijProps> = (p) => {
           <Audio src={staticFile(p.whooshSrc)} volume={0.35} />
         </Sequence>
       )) : null}
-      {p.whooshSrc ? (
-        <Sequence from={Math.max(0, endFrom - 8)} durationInFrames={14}>
-          <Audio src={staticFile(p.whooshSrc)} volume={0.5} />
-        </Sequence>
-      ) : null}
     </AbsoluteFill>
   );
 };

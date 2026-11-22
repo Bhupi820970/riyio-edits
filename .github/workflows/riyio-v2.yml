@@ -20,7 +20,7 @@ jobs:
       - name: System deps
         run: sudo apt-get update && (sudo apt-get install -y ffmpeg chromium-browser || sudo apt-get install -y ffmpeg chromium) && (sudo apt-get install -y fonts-urw-base35 fonts-liberation fonts-dejavu-core || true) && fc-cache -f
       - name: Python deps
-        run: pip install google-genai yt-dlp librosa faster-whisper requests
+        run: pip install google-genai yt-dlp librosa faster-whisper requests opencv-python-headless pillow
       - name: Remotion deps
         working-directory: remotion
         run: npm install

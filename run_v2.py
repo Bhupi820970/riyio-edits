@@ -7,33 +7,74 @@ import json, os, subprocess, shutil, random, math
 from pathlib import Path
 
 from pipeline_lib.gemini_brain import analyze, qc_inspect, available as gemini_ok
-from pipeline_lib.audio_sync import detect_beats, whisper_words, detect_language
+from pipeline_lib.audio_sync import detect_beats, whisper_words, detect_language, audible_start
 from pipeline_lib.sourcing import search_and_download, download_bank_song
 from pipeline_lib.postprocess import upscale_hdr, buffer_post
 from pipeline_lib import style
+from pipeline_lib import captions as captions_mod
 
-# Rotating famous-scene bank: iconic ENGLISH dialogue scenes (anime = English dub).
-NICHE_QUERIES = [
-    "Interstellar Cooper and Murph goodbye scene",
-    "The Dark Knight interrogation scene Joker Batman",
-    "Peaky Blinders Tommy Shelby speech scene",
-    "Oppenheimer Truman office scene",
-    "John Wick people keep asking if I'm back scene",
-    "Gladiator my name is Maximus scene",
-    "Game of Thrones Arya Walder Frey scene",
-    "Breaking Bad say my name scene",
-    "Stranger Things Eleven Vecna scene",
-    "Money Heist Professor speech scene English dub",
-    "Attack on Titan Eren speech scene English dub",
-    "Solo Leveling Jinwoo arise scene English dub",
-    "Jujutsu Kaisen Gojo throughout heaven and earth English dub",
-    "Naruto vs Pain conversation scene English dub",
-    "La La Land planetarium scene",
-    "Titanic I'm flying scene",
-    "The Notebook it wasn't over scene",
-    "Champions League iconic comeback English commentary",
-    "Formula 1 iconic team radio moment",
-]
+# Rotating famous-scene bank by GENRE: iconic ENGLISH dialogue (anime = English dub; sports/games may use
+# English commentary / team radio / cutscene dialogue). GENRE env forces a genre, QUERY env forces a query.
+GENRES = {
+    "movies": [
+        "Interstellar Cooper and Murph goodbye scene",
+        "The Dark Knight interrogation scene Joker Batman",
+        "Oppenheimer Truman office scene",
+        "John Wick people keep asking if I'm back scene",
+        "Gladiator my name is Maximus scene",
+        "The Wolf of Wall Street sell me this pen scene",
+        "Joker 2019 Murray Franklin show scene",
+        "Fight Club rules of fight club scene",
+    ],
+    "web_series": [
+        "Peaky Blinders Tommy Shelby speech scene",
+        "Game of Thrones Arya Walder Frey scene",
+        "Breaking Bad say my name scene",
+        "Stranger Things Eleven Vecna scene",
+        "Suits Harvey Specter iconic scene",
+        "The Boys Homelander iconic scene",
+        "House of the Dragon Daemon iconic scene",
+        "Money Heist Professor speech scene English dub",
+    ],
+    "games": [
+        "Red Dead Redemption 2 Arthur Morgan cutscene",
+        "God of War Kratos and Atreus cutscene",
+        "The Last of Us Joel hospital cutscene",
+        "GTA 5 Trevor meets Michael cutscene",
+        "Cyberpunk 2077 Johnny Silverhand cutscene",
+        "League of Legends official cinematic",
+        "Ghost of Tsushima Jin Sakai cutscene",
+        "Marvel's Spider-Man 2 official cutscene",
+    ],
+    "sports": [
+        "Verstappen Abu Dhabi 2021 last lap team radio",
+        "Lewis Hamilton iconic team radio moments",
+        "F1 greatest overtakes with commentary",
+        "Aguero 93:20 goal commentary Manchester City",
+        "Barcelona 6-1 PSG Sergi Roberto commentary",
+        "Liverpool 4-0 Barcelona corner taken quickly commentary",
+        "Messi El Clasico shirt celebration commentary",
+        "Champions League iconic comeback English commentary",
+    ],
+    "anime": [
+        "Attack on Titan Eren speech scene English dub",
+        "Jujutsu Kaisen Gojo throughout heaven and earth English dub",
+        "Naruto vs Pain conversation scene English dub",
+        "Solo Leveling Jinwoo arise scene English dub",
+        "Demon Slayer Rengoku final words English dub",
+        "One Piece Luffy I want to live scene English dub",
+    ],
+    "cartoons": [
+        "Kung Fu Panda Oogway peach tree scene",
+        "Kung Fu Panda Tai Lung vs Shifu scene",
+        "The Lion King Mufasa Simba remember who you are scene",
+        "Spider-Man Into the Spider-Verse leap of faith scene",
+        "Puss in Boots The Last Wish death scene",
+        "How to Train Your Dragon Hiccup Toothless scene",
+    ],
+}
+DIALOGUE_LIGHT = {"sports", "games"}   # commentary / team radio / cutscene lines count as dialogue
+NICHE_QUERIES = [q for qs in GENRES.values() for q in qs]
 
 def run(cmd):
     print("+", " ".join(str(c) for c in cmd[:7]), flush=True)
@@ -84,12 +125,13 @@ def ffmpeg_cut(src, dest, start, duration, audio=True):
 
 
 FPS = style.FPS
-MIN_WORDS = 8          # fewer words = captionless video -> reject / shift
+MIN_WORDS = 8          # fewer words = captionless video -> reject / shift (5 for sports / games)
+MAX_LEAD = 0.9         # max seconds before the first spoken word (intro trim)
 INTRO_SKIP = 15.0      # never dialogue_start < 15s on sources longer than 60s
 MAX_QC_RETRIES = 2
 MAX_CANDIDATES = 5
-END_CARD_S = 2.0
-DLG_MIN, DLG_MAX = 28.0, 46.0     # phase 1 (dialogue) seconds
+END_CARD_S = 0.0      # end card removed (BiBi, Nov 22)
+DLG_MIN, DLG_MAX = 24.0, 48.0     # phase 1 (dialogue) seconds
 TOTAL_MIN, TOTAL_MAX = 35.0, 59.0
 BED_GAIN = 0.28                   # ~ -11 dB under the dialogue
 BED_SONGS = {"emotional_romance": ["epic_4.mp3", "epic_7.mp3"],
@@ -160,7 +202,7 @@ def make_sfx(assets_dir):
     return hit, whoosh
 
 
-def find_speech_window(src, dur, length=40.0, scan=240.0):
+def find_speech_window(src, dur, length=40.0, scan=240.0, min_words=MIN_WORDS):
     """Transcribe up to `scan` seconds after the intro and return the densest-speech window."""
     lo = min_start(dur)
     hi = min(dur, lo + scan)
@@ -168,7 +210,7 @@ def find_speech_window(src, dur, length=40.0, scan=240.0):
         return None
     ws = whisper_words(extract_wav(src, Path("clips/scan.wav"), lo, hi - lo))
     print("SCAN words", len(ws), f"in {lo:.0f}-{hi:.0f}s", flush=True)
-    if len(ws) < MIN_WORDS:
+    if len(ws) < min_words:
         return None
     best, best_n = None, 0
     for i, w in enumerate(ws):
@@ -177,7 +219,7 @@ def find_speech_window(src, dur, length=40.0, scan=240.0):
         n = sum(1 for x in ws[i:] if x["e"] <= end)
         if n > best_n:
             best, best_n = (lo + start, lo + min(end, hi - lo)), n
-    if best_n < MIN_WORDS:
+    if best_n < min_words:
         return None
     return best
 
@@ -203,9 +245,18 @@ def pick_song(pool, mood, out):
     return None, None
 
 
+def genre_of(query):
+    for g, qs in GENRES.items():
+        if query in qs:
+            return g
+    return os.environ.get("GENRE", "movies")
+
+
 def build_draft(query, used_urls, demo, cand):
     """One full candidate: download -> Pass 1 -> words -> cuts -> render draft. Returns ctx dict."""
-    print(f"=== CANDIDATE {cand}: {query}", flush=True)
+    genre = genre_of(query)
+    min_words = 5 if genre in DIALOGUE_LIGHT else MIN_WORDS
+    print(f"=== CANDIDATE {cand} [{genre}]: {query}", flush=True)
     Path("clips").mkdir(exist_ok=True)
     src = Path("clips/source.mp4")
     src.unlink(missing_ok=True)
@@ -226,7 +277,7 @@ def build_draft(query, used_urls, demo, cand):
     run(["ffmpeg", "-y", "-i", str(src), "-vf", "scale=-2:360", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28", "-c:a", "aac", "-b:a", "64k", str(prev)])
 
     print("[2] Gemini Pass 1 (director)", flush=True)
-    plan = analyze(prev) if gemini_ok() else {"dialogue_start": 15, "dialogue_end": 50, "action_cuts": [], "mood": "dark_hype"}
+    plan = analyze(prev, genre) if gemini_ok() else {"dialogue_start": 15, "dialogue_end": 50, "action_cuts": [], "mood": "dark_hype"}
     if plan.get("reject"):
         raise CandidateRejected("Gemini Pass 1 rejected: " + str(plan.get("reject_reason") or "unspecified"))
     if str(plan.get("language") or "en").lower()[:2] != "en":
@@ -248,16 +299,16 @@ def build_draft(query, used_urls, demo, cand):
         raise CandidateRejected(f"dialogue window too short {ds:.1f}-{de:.1f}")
     win_len = min(dur - ds, de - ds + 1.5)
     words, lang = transcribe_window(src, ds, win_len)
-    if len(words) < MIN_WORDS:
+    if len(words) < min_words:
         print("too few words -> shifting to highest-speech segment", flush=True)
-        win = find_speech_window(src, dur)
+        win = find_speech_window(src, dur, min_words=min_words)
         if not win:
-            raise CandidateRejected(f"no speech segment with >= {MIN_WORDS} words")
+            raise CandidateRejected(f"no speech segment with >= {min_words} words")
         ds, de = win
         punch_abs = None
         win_len = de - ds
         words, lang = transcribe_window(src, ds, win_len)
-        if len(words) < MIN_WORDS:
+        if len(words) < min_words:
             raise CandidateRejected(f"only {len(words)} words after shift")
 
     pidx = style.find_punch(words, plan.get("punch_word", ""), (punch_abs - ds) if punch_abs is not None else None)
@@ -270,15 +321,26 @@ def build_draft(query, used_urls, demo, cand):
         words, lang = transcribe_window(src, ds, win_len + shift)
         pidx = style.find_punch(words, plan.get("punch_word", ""), punch_s + shift)
         punch_s, punch_e = words[pidx]["s"], words[pidx]["e"]
-    if punch_e + 0.3 > DLG_MAX:
-        shift = punch_e + 0.3 - DLG_MAX
-        ds += shift
-        words = [{**x, "s": x["s"] - shift, "e": x["e"] - shift} for x in words if x["s"] - shift >= 0.05]
-        pidx = style.find_punch(words, plan.get("punch_word", ""), punch_s - shift)
-        punch_s, punch_e = words[pidx]["s"], words[pidx]["e"]
-    print(f"PUNCH '{words[pidx]['word']}' at {punch_s:.2f}-{punch_e:.2f}s (window start {ds:.2f})", flush=True)
 
-    # ---- music: dark bed (ducked) + phonk/epic drop on the punch word ----
+    def shift_words(sh):
+        nonlocal ds, words, pidx, punch_s, punch_e
+        ds += sh
+        pw = words[pidx]
+        words = [{**x, "s": x["s"] - sh, "e": x["e"] - sh} for x in words if x["s"] - sh >= 0.0]
+        pidx = next((i for i, x in enumerate(words) if abs(x["s"] - (pw["s"] - sh)) < 1e-6), len(words) - 1)
+        punch_s, punch_e = words[pidx]["s"], words[pidx]["e"]
+
+    if punch_e + 0.1 > DLG_MAX:
+        shift_words(punch_e + 0.1 - DLG_MAX)
+    # intro trim: first spoken word within ~1s (no silent / dead lead-in)
+    if words and words[0]["s"] > MAX_LEAD:
+        shift_words(words[0]["s"] - 0.5)
+    # the phase-1 words end at the punch word: the character goes quiet -> montage
+    words = words[: pidx + 1]
+    print(f"PUNCH '{words[pidx]['word']}' at {punch_s:.2f}-{punch_e:.2f}s (window start {ds:.2f}, "
+          f"first word {words[0]['s']:.2f}s)", flush=True)
+
+    # ---- music: dark bed (ducked, whole dialogue) + phonk/epic drop at 0 dB exactly on the punch word ----
     mood = plan.get("mood") or "dark_hype"
     bed, bed_name = pick_song(BED_SONGS, mood, Path("clips/bed.mp3"))
     drop, drop_name = pick_song(DROP_SONGS, mood, Path("clips/drop.mp3"))
@@ -292,14 +354,14 @@ def build_draft(query, used_urls, demo, cand):
         iv = 60.0 / max(60.0, _num(beats.get("tempo"), 120))
         beats_comp = [punch_s + k * iv for k in range(80)]
 
-    # phase 1 ends on the first kick after the punch word
-    D = punch_e + 0.25
-    nxt = [b for b in beats_comp if punch_e + 0.1 <= b <= punch_e + 0.7]
+    # tight transition: montage starts the moment the punch word ends (snap to a kick within 0.3s)
+    D = punch_e + 0.06
+    nxt = [b for b in beats_comp if punch_e <= b <= punch_e + 0.3]
     if nxt:
         D = nxt[0]
-    M = max(round(D * 0.22, 2), TOTAL_MIN + 1.5 - D - END_CARD_S)
-    M = min(max(M, 5.0), 13.0, TOTAL_MAX - D - END_CARD_S)
-    if M < 4.0 or D + M + END_CARD_S < TOTAL_MIN:
+    M = max(round(D * 0.22, 2), TOTAL_MIN + 1.0 - D)
+    M = min(max(M, 5.0), 14.0, TOTAL_MAX - D)
+    if M < 4.0 or D + M < TOTAL_MIN:
         raise CandidateRejected(f"cannot fit 35-60s (dialogue {D:.1f}s)")
     cuts = style.montage_cuts(beats_comp, D, M)
 
@@ -347,13 +409,26 @@ def build_draft(query, used_urls, demo, cand):
     if len(action_paths) < 5:
         raise CandidateRejected(f"only {len(action_paths)} montage cuts")
 
-    end_frames = int(round(END_CARD_S * FPS))
-    total = dialogue_frames + sum(action_frames) + end_frames
+    total = dialogue_frames + sum(action_frames)
     if not (TOTAL_MIN * FPS <= total <= 60 * FPS):
         raise CandidateRejected(f"length {total / FPS:.1f}s outside 35-60s")
 
-    # ---- captions (1-4 words, whisper word timing) + hooks ----
-    captions = style.group_captions(words, pidx, dialogue_frames / FPS)
+    # ---- picture rect inside the 4:5 frame (for watermark + caption band) ----
+    cw, ch = (w, h)
+    if LETTERBOX["crop"]:
+        cw, ch = (int(v) for v in LETTERBOX["crop"].split(":")[:2])
+    sc = min(style.W / cw, style.H / ch)
+    pw, ph = cw * sc, ch * sc
+    pic = {"x": round((style.W - pw) / 2), "y": round((style.H - ph) / 2), "w": round(pw), "h": round(ph)}
+    banner_h = int(style.H * 0.10)
+    band = (max(pic["y"], banner_h + 8) + 6, pic["y"] + pic["h"] - 6)
+
+    # ---- captions: speaker-side styles (pro-edit P01-P15 + R00 glow), word-level timing ----
+    cap_style = captions_mod.pick_style(mood, info.get("url", "") + query)
+    groups = style.group_captions(words, pidx, dialogue_frames / FPS, max_words=min(4, cap_style["words"] + 1))
+    groups = [{"start": g["start"], "end": g["end"], "words": g["raw"]} for g in groups]
+    cap_events, cap_info = captions_mod.build_events(groups, pidx, cap_style, dlg, style.W, style.H, band, FPS)
+    print("CAPTIONS style", cap_style["id"], cap_style["name"], "|", len(cap_events), "events", cap_info, flush=True)
     hook = (plan.get("hook_title") or plan.get("hook") or "").strip().strip('"')
     if not style.good_hook(hook):
         hook = " ".join((plan.get("scene") or info.get("title") or "The Moment").split()[:3])
@@ -373,11 +448,19 @@ def build_draft(query, used_urls, demo, cand):
     for i, ap in enumerate(action_paths):
         shutil.copy(ap, assets_dir / f"action_{i}.mp4")
         rel_actions.append(f"assets/action_{i}.mp4")
+    # music pre-mix: loudness-normalised so the bed sits ~11 dB under the dialogue and the drop is full level
+    drop_s = drop_frame / FPS
+    bed_start = audible_start(bed) if bed else 0.0
     if bed:
-        shutil.copy(bed, assets_dir / "bed.mp3")
+        run(["ffmpeg", "-y", "-ss", f"{bed_start:.3f}", "-t", f"{drop_s + 0.6:.3f}", "-i", str(bed),
+             "-af", "loudnorm=I=-16:TP=-1.5:LRA=11,afade=t=in:d=0.08", "-ar", "48000", "-ac", "2",
+             "-c:a", "aac", "-b:a", "256k", str(assets_dir / "bed.m4a")])
     if drop:
-        shutil.copy(drop, assets_dir / "drop.mp3")
+        run(["ffmpeg", "-y", "-ss", f"{song_drop:.3f}", "-t", f"{total / FPS - drop_s + 0.6:.3f}", "-i", str(drop),
+             "-af", "loudnorm=I=-10:TP=-1.0:LRA=7", "-ar", "48000", "-ac", "2",
+             "-c:a", "aac", "-b:a", "256k", str(assets_dir / "drop.m4a")])
     make_sfx(assets_dir)
+    wm_size = captions_mod.watermark_size("RIYIO", style.W, 0.07)
 
     props = {
         "hook": hook,
@@ -387,26 +470,34 @@ def build_draft(query, used_urls, demo, cand):
         "dropFrame": drop_frame,
         "actionClips": rel_actions,
         "actionFrames": action_frames,
-        "endFrames": end_frames,
-        "captions": captions,
-        "bedSrc": "assets/bed.mp3" if bed else "",
+        "captions": cap_events,
+        "captionFont": cap_style["font"],
+        "captionLook": cap_style["look"],
+        "bedSrc": "assets/bed.m4a" if bed else "",
         "bedVolume": BED_GAIN,
-        "dropSrc": "assets/drop.mp3" if drop else "",
-        "dropTrimBefore": int(round(song_drop * FPS)),
+        "dropSrc": "assets/drop.m4a" if drop else "",
         "hitSrc": "assets/hit.wav",
         "whooshSrc": "assets/whoosh.wav",
+        "picture": pic,
+        "wmSize": wm_size,
         "durationInFrames": total,
         "post_caption": plan.get("post_caption", ""),
     }
     Path("remotion-props.json").write_text(json.dumps(props, indent=2))
-    meta = {**plan, "source": info, "source_res": f"{w}x{h}", "window_start": round(ds, 2),
-            "punch": words[pidx]["word"], "punch_s": round(punch_s, 2), "bed_song": bed_name, "drop_song": drop_name,
+    meta = {**plan, "genre": genre_of(query), "query": query, "source": info, "source_res": f"{w}x{h}",
+            "letterbox_crop": LETTERBOX["crop"], "picture": pic, "window_start": round(ds, 2),
+            "first_word_s": round(words[0]["s"], 2), "punch": words[pidx]["word"], "punch_s": round(punch_s, 3),
+            "drop_s": round(drop_s, 3), "montage_start_s": round(dialogue_frames / FPS, 3),
+            "bed_song": bed_name, "bed_start_s": round(bed_start, 2), "drop_song": drop_name,
             "song_drop_s": round(song_drop, 2), "tempo": beats.get("tempo"), "words": len(words), "language": lang,
             "dialogue_s": round(dialogue_frames / FPS, 2), "montage_s": round(sum(action_frames) / FPS, 2),
-            "total_s": round(total / FPS, 2), "captions": len(captions)}
+            "montage_cuts": len(action_frames), "total_s": round(total / FPS, 2), "captions": len(cap_events),
+            "caption_style": f"{cap_style['id']} {cap_style['name']}", "caption_zones": cap_info}
     Path("plan.json").write_text(json.dumps(meta, indent=2, default=str))
-    print("PLAN", json.dumps({k: meta[k] for k in ("scene", "punch", "bed_song", "drop_song", "dialogue_s", "montage_s",
-                                                  "total_s", "words", "captions", "hook_title", "hook_question")}, default=str), flush=True)
+    print("PLAN", json.dumps({k: meta[k] for k in ("genre", "scene", "punch", "punch_s", "drop_s", "montage_start_s",
+                                                  "first_word_s", "bed_song", "drop_song", "dialogue_s", "montage_s",
+                                                  "montage_cuts", "total_s", "words", "captions", "caption_style",
+                                                  "hook_title", "hook_question")}, default=str), flush=True)
 
     print("[5] Remotion render (draft)", flush=True)
     draft = Path("out_remotion.mp4")
@@ -423,7 +514,14 @@ def next_query(tried):
     env_q = os.environ.get("QUERY")
     if env_q and env_q not in tried:
         return env_q
-    pool = [q for q in NICHE_QUERIES if q not in tried] or NICHE_QUERIES
+    genre = os.environ.get("GENRE", "").strip().lower()
+    if genre not in GENRES:
+        # rotate genres across runs; stay in the same genre for this run's retries
+        if not tried:
+            genre = list(GENRES)[int(os.environ.get("GITHUB_RUN_NUMBER") or random.randint(0, 99)) % len(GENRES)]
+        else:
+            genre = genre_of(next(iter(tried)))
+    pool = [q for q in GENRES[genre] if q not in tried] or [q for q in NICHE_QUERIES if q not in tried] or NICHE_QUERIES
     return random.choice(pool)
 
 
@@ -456,6 +554,13 @@ def black_segments(video, until):
     return [ln.split("blackdetect")[-1].strip() for ln in r.stderr.splitlines() if "black_start" in ln]
 
 
+def silent_segments(video):
+    """Local check: music must be audible the whole video (no gaps below -45 dB for 0.4s+)."""
+    r = subprocess.run(["ffmpeg", "-hide_banner", "-i", str(video), "-af", "silencedetect=noise=-45dB:d=0.4",
+                        "-vn", "-f", "null", "-"], capture_output=True, text=True)
+    return [ln.split("]")[-1].strip() for ln in r.stderr.splitlines() if "silence_start" in ln]
+
+
 def main():
     demo = os.environ.get("DEMO_ONLY", "false").lower() in ("1", "true", "yes")
     print("DEMO", demo, "GEMINI", gemini_ok(), flush=True)
@@ -467,11 +572,17 @@ def main():
     for attempt in range(MAX_QC_RETRIES + 1):
         print(f"[6] Gemini Pass 2 (QC) attempt {attempt + 1}", flush=True)
         dlen = probe_duration(draft)
-        blacks = black_segments(draft, dlen - END_CARD_S)
-        facts = {"duration_s": round(dlen, 2), "language": ctx["plan"].get("language"),
-                 "whisper_words": ctx["plan"].get("words"), "caption_groups": ctx["plan"].get("captions"),
-                 "dialogue_s": ctx["plan"].get("dialogue_s"), "montage_s": ctx["plan"].get("montage_s"),
-                 "end_card_s": END_CARD_S, "black_segments": blacks}
+        blacks = black_segments(draft, dlen)
+        silences = silent_segments(draft)
+        pl = ctx["plan"]
+        facts = {"duration_s": round(dlen, 2), "genre": pl.get("genre"), "language": pl.get("language"),
+                 "whisper_words": pl.get("words"), "caption_groups": pl.get("captions"),
+                 "caption_style": pl.get("caption_style"), "first_word_s": pl.get("first_word_s"),
+                 "punch_word": pl.get("punch"), "punch_word_s": pl.get("punch_s"), "drop_s": pl.get("drop_s"),
+                 "montage_start_s": pl.get("montage_start_s"), "montage_cuts": pl.get("montage_cuts"),
+                 "dialogue_s": pl.get("dialogue_s"), "montage_s": pl.get("montage_s"), "end_card": "none",
+                 "watermark": "RIYIO inside the picture, bottom-center", "black_segments": blacks,
+                 "silent_segments": silences}
         print("QC FACTS", json.dumps(facts), flush=True)
         qc360 = Path("draft360.mp4")
         run(["ffmpeg", "-y", "-i", str(draft), "-vf", "scale=-2:360", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28", "-c:a", "aac", "-b:a", "64k", str(qc360)])
@@ -481,6 +592,10 @@ def main():
             local.append(f"length {dlen:.1f}s outside 35-60s")
         if blacks:
             local.append(f"black frames: {blacks[:3]}")
+        if silences:
+            local.append(f"music not audible: {silences[:3]}")
+        if abs(_num(pl.get("drop_s"), 0) - _num(pl.get("punch_s"), -9)) > 0.05:
+            local.append("drop not on the punch word")
         if local:
             verdict["pass"] = False
             verdict["issues"] = list(verdict.get("issues") or []) + local
