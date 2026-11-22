@@ -9,14 +9,14 @@ export const RemotionRoot: React.FC = () => {
       durationInFrames={900}
       fps={30}
       width={1080}
-      height={1920}
+      height={1350}
       defaultProps={{
-        hook: "She read him cold",
+        hook: "Winter is finally here",
         dialogueSrc: "",
         actionClips: [],
         words: [],
         songSrc: "",
-        beatDropFrame: 600,
+        beatDropFrame: 180,
       }}
     />
   );
