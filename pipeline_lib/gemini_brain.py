@@ -10,7 +10,7 @@ except ImportError:
 
 KEYS = [os.environ.get("GEMINI_API_KEY_1"), os.environ.get("GEMINI_API_KEY_2"), os.environ.get("GEMINI_API_KEY")]
 KEYS = [k for k in KEYS if k]
-MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"]
+MODELS = ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-2.0-flash"]
 
 PROMPT = '''Analyze this movie/series/sports clip. Return ONLY valid JSON:
 {
