@@ -1,5 +1,5 @@
 import React from 'react';
-import {AbsoluteFill, Audio, Img, Sequence, staticFile, useCurrentFrame, useVideoConfig, spring, interpolate} from 'remotion';
+import {AbsoluteFill, Audio, OffthreadVideo, Sequence, staticFile, useCurrentFrame, useVideoConfig, spring, interpolate} from 'remotion';
 
 type Word = {word: string; s: number; e: number};
 type Props = {
@@ -38,13 +38,13 @@ export const JuraijEdit: React.FC<Props> = ({hook, dialogueSrc, actionClips, wor
 
       {/* Dialogue build-up */}
       {!isDrop && dialogueSrc ? (
-        <Img src={staticFile(dialogueSrc)} style={{width: '100%', height: '100%', objectFit: 'cover', transform: `scale(${zoom})`}} />
+        <OffthreadVideo src={staticFile(dialogueSrc)} muted style={{width: '100%', height: '100%', objectFit: 'cover', transform: `scale(${zoom})`}} />
       ) : null}
 
       {/* Beat-drop action cuts */}
       {isDrop && actionClips.map((src, i) => (
         <Sequence key={i} from={beatDropFrame + i * 20} durationInFrames={20}>
-          <Img src={staticFile(src)} style={{width: '100%', height: '100%', objectFit: 'cover', transform: `scale(${zoom})`}} />
+          <OffthreadVideo src={staticFile(src)} muted style={{width: '100%', height: '100%', objectFit: 'cover', transform: `scale(${zoom})`}} />
         </Sequence>
       ))}
 

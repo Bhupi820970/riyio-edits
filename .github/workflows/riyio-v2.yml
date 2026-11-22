@@ -8,12 +8,13 @@ on:
 jobs:
   edit:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.11"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "20"
       - name: System deps
@@ -26,6 +27,7 @@ jobs:
       - name: Run pipeline
         env:
           DEMO_ONLY: ${{ inputs.demo_only }}
+          REPO: ${{ github.repository }}
           GEMINI_API_KEY_1: ${{ secrets.GEMINI_API_KEY_1 }}
           GEMINI_API_KEY_2: ${{ secrets.GEMINI_API_KEY_2 }}
           RAPIDAPI_KEY_1: ${{ secrets.RAPIDAPI_KEY_1 }}
@@ -35,11 +37,13 @@ jobs:
           BUFFER_ACCESS_TOKEN: ${{ secrets.BUFFER_ACCESS_TOKEN }}
         run: python -u run_v2.py
       - name: Artifact
-        uses: actions/upload-artifact@v4
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: riyio-final
           path: |
             out.final.mp4
-            out_base.mp4
-            remotion/out/*.mp4
+            out_remotion.mp4
+            remotion-props.json
+            plan.json
           if-no-files-found: ignore

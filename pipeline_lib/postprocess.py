@@ -5,11 +5,11 @@ from pathlib import Path
 
 GRADE = "scale=2160:2700:flags=lanczos,eq=contrast=1.16:brightness=-0.04:saturation=1.15,unsharp=5:5:1.2:5:5:0.0,vignette=PI/5"
 
-def upscale_hdr(src: Path, out: Path):
+def upscale_hdr(src: Path, out: Path, preset: str = "medium"):
     cmd = [
         "ffmpeg", "-y", "-i", str(src),
         "-vf", GRADE,
-        "-c:v", "libx264", "-crf", "16", "-preset", "slow", "-pix_fmt", "yuv420p",
+        "-c:v", "libx264", "-crf", "16", "-preset", preset, "-pix_fmt", "yuv420p",
         "-c:a", "aac", "-b:a", "192k",
         str(out),
     ]

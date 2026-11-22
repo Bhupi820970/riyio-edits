@@ -138,4 +138,50 @@ def pick_or_download_song(mood: str, songs_dir: Path, out: Path) -> Path | None:
         mp3s = list(songs_dir.glob("*.mp3"))
         if mp3s:
             return mp3s[0]
+    try:
+        got = _download_song_from_bank(mood, out)
+        if got:
+            return got
+    except Exception as e:
+        print("songs-bank fetch failed", e)
+    return None
+
+
+def _download_song_from_bank(mood: str, out: Path) -> Path | None:
+    """Pull a mood-matched track from the public songs-bank release."""
+    repo = os.environ.get("REPO", "Bhupi820970/riyio-edits")
+    token = (mood or "dark").lower().replace("-", "_")
+    prefixes = []
+    for pref in (token, token.split("_")[0], "dark", "epic"):
+        if pref and pref not in prefixes:
+            prefixes.append(pref)
+    candidates: list[str] = []
+    catalog = Path("config/songs_catalog.json")
+    if catalog.exists():
+        songs = json.loads(catalog.read_text()).get("songs") or []
+        for pref in prefixes:
+            for s in songs:
+                fname = s.get("file") or ""
+                if s.get("mood") == pref or fname.startswith(pref + "_"):
+                    candidates.append(fname)
+        candidates.extend(s.get("file") or "" for s in songs)
+    else:
+        for pref in prefixes:
+            candidates.extend(f"{pref}_{i}.mp3" for i in range(1, 11))
+    files: list[str] = []
+    for f in candidates:
+        if f and f not in files:
+            files.append(f)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    for fname in files[:8]:
+        url = f"https://github.com/{repo}/releases/download/songs-bank/{fname}"
+        r = subprocess.run(
+            ["curl", "-fsSL", "-L", "-o", str(out), url],
+            capture_output=True, text=True, timeout=180,
+        )
+        if r.returncode == 0 and out.exists() and out.stat().st_size >= 50_000:
+            print("SONG from songs-bank", fname, out.stat().st_size)
+            return out
+        if out.exists():
+            out.unlink(missing_ok=True)
     return None
