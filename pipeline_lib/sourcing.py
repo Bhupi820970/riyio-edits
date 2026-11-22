@@ -1,68 +1,124 @@
-"""Sourcing with verbose yt-dlp fallback."""
+"""Working RapidAPI downloader (exact pre-v2 endpoints). No yt-dlp."""
 from __future__ import annotations
-import base64, os, subprocess, tempfile
+import json, os, re, subprocess, time, urllib.error, urllib.parse, urllib.request
 from pathlib import Path
 
+RAPID_HOST = "youtube-info-download-api.p.rapidapi.com"
+RAPID_BASE = f"https://{RAPID_HOST}"
+UA = "Mozilla/5.0 (X11; Linux x86_64) riyio-pipeline/1.0"
 BLACKLIST = {"netflix", "crunchyroll", "prime video", "amazon prime", "hbo", "disney+", "marvel entertainment", "warner bros", "sony pictures", "espn"}
+
+class RapidAPIError(RuntimeError):
+    pass
+
+def _keys() -> list[tuple[int, str]]:
+    out = []
+    for i in range(1, 5):
+        # support both old YT_RAPIDAPI_KEY_ and new RAPIDAPI_KEY_
+        k = (os.environ.get(f"YT_RAPIDAPI_KEY_{i}") or os.environ.get(f"RAPIDAPI_KEY_{i}") or "").strip()
+        if k:
+            out.append((i, k))
+    return out
+
+_DEAD = set()
+_CUR = 0
+
+def _rapid_get(path: str, params: dict, timeout: int = 60) -> dict:
+    global _CUR
+    keys = _keys()
+    if not keys:
+        raise RapidAPIError("no RapidAPI keys")
+    qs = urllib.parse.urlencode(params)
+    url = f"{RAPID_BASE}{path}?{qs}"
+    n = len(keys)
+    for step in range(n):
+        slot, key = keys[(_CUR + step) % n]
+        if slot in _DEAD:
+            continue
+        req = urllib.request.Request(url, headers={
+            "x-rapidapi-host": RAPID_HOST, "x-rapidapi-key": key, "User-Agent": UA})
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                data = json.loads(r.read().decode("utf-8", errors="ignore") or "{}")
+            _CUR = (_CUR + step) % n
+            return data
+        except urllib.error.HTTPError as e:
+            if e.code in (401, 403, 429):
+                _DEAD.add(slot)
+                continue
+            raise RapidAPIError(f"http {e.code}") from e
+    raise RapidAPIError("all keys exhausted")
 
 def is_blacklisted(title: str, channel: str) -> bool:
     t = (title + " " + channel).lower()
     return any(b in t for b in BLACKLIST)
 
-def ytdlp_cookie_args() -> list[str]:
-    cookies = (os.environ.get("YT_COOKIES") or "").strip()
-    if not cookies:
-        return []
-    try:
-        if not cookies.startswith("#") and "\t" not in cookies[:120]:
-            cookies = base64.b64decode(cookies).decode("utf-8", errors="ignore")
-        if not cookies.startswith("# Netscape"):
-            cookies = "# Netscape HTTP Cookie File\n" + cookies
-        fd, path = tempfile.mkstemp(suffix=".txt", prefix="ytc_")
-        os.write(fd, cookies.encode())
-        os.close(fd)
-        return ["--cookies", path]
-    except Exception:
-        return []
+def rapid_search(query: str) -> list[dict]:
+    data = _rapid_get("/api/youtube/search", {"q": query})
+    vids = data.get("videos") or data.get("results") or data.get("items") or []
+    out = []
+    for v in vids:
+        if not isinstance(v, dict):
+            continue
+        vid = v.get("id") or v.get("videoId") or ""
+        link = v.get("link") or v.get("url") or (f"https://www.youtube.com/watch?v={vid}" if vid else "")
+        if not link:
+            continue
+        ch = v.get("channel")
+        if isinstance(ch, dict):
+            ch = ch.get("name") or ""
+        out.append({"id": vid, "title": v.get("title") or "", "url": link, "channel": ch or ""})
+    return out
 
-def ytdlp_download(query: str, out: Path) -> dict | None:
-    print("YT-DLP trying:", query[:60])
-    search_cmd = [
-        "yt-dlp", "--no-playlist", "--skip-download",
-        "--print", "%(id)s|||%(title)s|||%(channel)s",
-        f"ytsearch6:{query}",
-    ] + ytdlp_cookie_args()
-    r = subprocess.run(search_cmd, capture_output=True, text=True, timeout=90)
-    print("search rc", r.returncode, "stdout lines", len((r.stdout or "").splitlines()))
-    if r.returncode != 0:
-        print("search err", (r.stderr or "")[-300:])
-    for line in (r.stdout or "").splitlines():
-        parts = line.split("|||")
-        if len(parts) < 3:
+def rapid_download(url: str, out: Path, fmt: str = "mp4") -> dict:
+    job = _rapid_get("/ajax/download.php", {"url": url, "format": fmt})
+    if not job.get("success"):
+        raise RapidAPIError(f"start failed: {job}")
+    progress = job.get("progress_url")
+    if not progress:
+        raise RapidAPIError("no progress_url")
+    dl = None
+    for _ in range(60):
+        time.sleep(5)
+        try:
+            with urllib.request.urlopen(progress, timeout=30) as r:
+                p = json.loads(r.read().decode() or "{}")
+        except Exception:
             continue
-        vid, title, channel = parts[0].strip(), parts[1].strip(), parts[2].strip()
-        if is_blacklisted(title, channel):
-            print("skip blacklist", title[:40])
-            continue
-        print("trying", vid, title[:50])
-        dl_cmd = [
-            "yt-dlp", "--no-playlist",
-            "-f", "bv*[height<=1080]+ba/b[height<=1080]/b",
-            "--extractor-args", "youtube:player_client=android,web",
-            "-o", str(out),
-            f"https://www.youtube.com/watch?v={vid}",
-        ] + ytdlp_cookie_args()
-        d = subprocess.run(dl_cmd, capture_output=True, text=True, timeout=240)
-        if d.returncode == 0 and out.exists() and out.stat().st_size > 100_000:
-            print("DOWNLOADED", out.stat().st_size)
-            return {"title": title, "channel": channel, "id": vid, "path": str(out)}
-        else:
-            print("dl fail", (d.stderr or "")[-200:])
-    return None
+        if int(p.get("progress") or 0) >= 1000 and p.get("download_url"):
+            dl = p["download_url"]
+            break
+    if not dl:
+        raise RapidAPIError("conversion timeout")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    r = subprocess.run(["curl", "-fsSL", "--retry", "3", "-A", UA, "-o", str(out), dl],
+                       capture_output=True, text=True, timeout=600)
+    if r.returncode != 0 or not out.exists() or out.stat().st_size < 50_000:
+        raise RapidAPIError("file fetch failed")
+    return {"title": job.get("title") or "", "id": job.get("id") or "", "path": str(out)}
 
 def search_and_download(query: str, out: Path) -> dict | None:
-    # Direct yt-dlp (RapidAPI endpoint unreliable for full download)
-    return ytdlp_download(query, out)
+    print("RapidAPI search:", query[:50])
+    try:
+        results = rapid_search(query)
+    except Exception as e:
+        print("search fail", e)
+        return None
+    print("got", len(results), "results")
+    for it in results[:6]:
+        if is_blacklisted(it["title"], it["channel"]):
+            print("skip", it["title"][:40])
+            continue
+        try:
+            info = rapid_download(it["url"], out)
+            info["title"] = it["title"]
+            info["channel"] = it["channel"]
+            print("DOWNLOADED", out.stat().st_size)
+            return info
+        except Exception as e:
+            print("dl fail", e)
+            continue
+    return None
 
 def pick_or_download_song(mood: str, songs_dir: Path, out: Path) -> Path | None:
     if songs_dir.exists():
