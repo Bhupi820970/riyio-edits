@@ -1,14 +1,14 @@
 {
   "name": "riyio-juraij",
   "version": "1.0.0",
+  "private": true,
   "scripts": {
-    "start": "remotion studio",
     "render": "remotion render src/index.ts JuraijEdit out/juraij.mp4"
   },
   "dependencies": {
-    "@remotion/cli": "4.0.0",
-    "react": "18.2.0",
-    "react-dom": "18.2.0",
-    "remotion": "4.0.0"
+    "@remotion/cli": "^4.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "remotion": "^4.0.0"
   }
 }
