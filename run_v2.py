@@ -2,7 +2,7 @@
 from __future__ import annotations
 import traceback
 
-import json, os, subprocess
+import json, sys, os, subprocess
 from pathlib import Path
 
 from pipeline_lib.gemini_brain import analyze, available as gemini_ok
@@ -69,6 +69,7 @@ def main():
         "post_caption": plan.get("post_caption", ""),
     }
     Path("remotion-props.json").write_text(json.dumps(props, indent=2))
+    print("[3] FFmpeg cuts done", flush=True)
     print("PROPS", len(words), "words,", len(action_paths), "actions")
 
     # Copy assets into remotion/public/assets and use relative paths
@@ -103,6 +104,7 @@ def main():
 
     # Remotion render only (no FFmpeg fallback)
     remotion_out = Path("out_remotion.mp4")
+    print("[5] Remotion render", flush=True)
     run(["bash", "-c", "cd remotion && ./node_modules/.bin/remotion render src/index.ts JuraijEdit ../out_remotion.mp4 --props=../remotion-props.json || npx --no-install remotion render src/index.ts JuraijEdit ../out_remotion.mp4 --props=../remotion-props.json"])
     if not remotion_out.exists() or remotion_out.stat().st_size < 1000:
         raise RuntimeError("Remotion produced no output")
