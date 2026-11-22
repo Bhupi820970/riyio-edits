@@ -1,20 +1,9 @@
-"""Sourcing: RapidAPI attempt + yt-dlp fallback. Blacklist intact."""
+"""Sourcing with verbose yt-dlp fallback."""
 from __future__ import annotations
-import base64, json, os, subprocess, tempfile
+import base64, os, subprocess, tempfile
 from pathlib import Path
 
-import requests
-
 BLACKLIST = {"netflix", "crunchyroll", "prime video", "amazon prime", "hbo", "disney+", "marvel entertainment", "warner bros", "sony pictures", "espn"}
-MOOD_QUERIES = {
-    "dark_hype": "dark hype viral edit song slowed reverb",
-    "epic_cinematic": "epic cinematic edit audio",
-    "emotional_romance": "emotional romance edit song",
-    "cold_sigma": "cold sigma edit song slowed",
-}
-
-def rapid_keys():
-    return [os.environ.get(f"RAPIDAPI_KEY_{i}") for i in range(1, 5) if os.environ.get(f"RAPIDAPI_KEY_{i}")]
 
 def is_blacklisted(title: str, channel: str) -> bool:
     t = (title + " " + channel).lower()
@@ -37,61 +26,42 @@ def ytdlp_cookie_args() -> list[str]:
         return []
 
 def ytdlp_download(query: str, out: Path) -> dict | None:
-    """yt-dlp search + download with blacklist check."""
-    cmd = [
-        "yt-dlp", "--no-playlist", "-f", "bv*+ba/b",
-        "--extractor-args", "youtube:player_client=android,web",
-        "--print", "%(id)s\t%(title)s\t%(channel)s",
-        f"ytsearch8:{query}",
+    print("YT-DLP trying:", query[:60])
+    search_cmd = [
+        "yt-dlp", "--no-playlist", "--skip-download",
+        "--print", "%(id)s|||%(title)s|||%(channel)s",
+        f"ytsearch6:{query}",
     ] + ytdlp_cookie_args()
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    r = subprocess.run(search_cmd, capture_output=True, text=True, timeout=90)
+    print("search rc", r.returncode, "stdout lines", len((r.stdout or "").splitlines()))
+    if r.returncode != 0:
+        print("search err", (r.stderr or "")[-300:])
     for line in (r.stdout or "").splitlines():
-        parts = line.split("\t")
+        parts = line.split("|||")
         if len(parts) < 3:
             continue
-        vid, title, channel = parts[0], parts[1], parts[2]
+        vid, title, channel = parts[0].strip(), parts[1].strip(), parts[2].strip()
         if is_blacklisted(title, channel):
+            print("skip blacklist", title[:40])
             continue
-        dl = [
-            "yt-dlp", "--no-playlist", "-f", "bv*+ba/b",
+        print("trying", vid, title[:50])
+        dl_cmd = [
+            "yt-dlp", "--no-playlist",
+            "-f", "bv*[height<=1080]+ba/b[height<=1080]/b",
             "--extractor-args", "youtube:player_client=android,web",
-            "-o", str(out), f"https://www.youtube.com/watch?v={vid}",
+            "-o", str(out),
+            f"https://www.youtube.com/watch?v={vid}",
         ] + ytdlp_cookie_args()
-        d = subprocess.run(dl, capture_output=True, text=True, timeout=180)
-        if d.returncode == 0 and out.exists() and out.stat().st_size > 200_000:
+        d = subprocess.run(dl_cmd, capture_output=True, text=True, timeout=240)
+        if d.returncode == 0 and out.exists() and out.stat().st_size > 100_000:
+            print("DOWNLOADED", out.stat().st_size)
             return {"title": title, "channel": channel, "id": vid, "path": str(out)}
+        else:
+            print("dl fail", (d.stderr or "")[-200:])
     return None
 
 def search_and_download(query: str, out: Path) -> dict | None:
-    """Try RapidAPI first, fall back to yt-dlp."""
-    # RapidAPI attempt (best-effort)
-    ks = rapid_keys()
-    if ks:
-        host = "youtube-info-download-api.p.rapidapi.com"
-        for k in ks[:2]:
-            try:
-                r = requests.get(
-                    f"https://{host}/search",
-                    headers={"x-rapidapi-key": k, "x-rapidapi-host": host},
-                    params={"query": query},
-                    timeout=20,
-                )
-                if r.status_code == 200:
-                    items = r.json().get("items") or r.json().get("results") or []
-                    for it in items[:4]:
-                        title = it.get("title") or ""
-                        channel = it.get("channel") or it.get("author") or ""
-                        vid = it.get("id") or it.get("videoId")
-                        if vid and not is_blacklisted(title, channel):
-                            # try direct download via yt-dlp with the id
-                            info = ytdlp_download(f"https://www.youtube.com/watch?v={vid}", out)
-                            if info:
-                                info["title"] = title
-                                info["channel"] = channel
-                                return info
-            except Exception:
-                pass
-    # yt-dlp search fallback
+    # Direct yt-dlp (RapidAPI endpoint unreliable for full download)
     return ytdlp_download(query, out)
 
 def pick_or_download_song(mood: str, songs_dir: Path, out: Path) -> Path | None:
@@ -102,6 +72,4 @@ def pick_or_download_song(mood: str, songs_dir: Path, out: Path) -> Path | None:
         mp3s = list(songs_dir.glob("*.mp3"))
         if mp3s:
             return mp3s[0]
-    # yt-dlp audio fallback
-    info = ytdlp_download(MOOD_QUERIES.get(mood, "cinematic edit audio"), out)
-    return Path(info["path"]) if info else None
+    return None
