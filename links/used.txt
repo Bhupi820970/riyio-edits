@@ -4,3 +4,4 @@
 2026-11-22 18:31	rejected	https://www.youtube.com/watch?v=zXQQzvwVPNw	cannot fit 35-60s (dialogue 17.1s)
 2026-11-22 18:37	channel-used	https://www.youtube.com/watch?v=owkyYjKFUvM	Biker Gang Vs Toxic Zombie | COLD STORAGE (2026) Movie CLIP 4K
 2026-11-23 00:25 IST	channel-used	https://www.youtube.com/watch?v=XKCEfsnRO_M	The Final Scene & After-Credits Surprise | Insidious: Out of the Further (4K)
+2026-11-23 00:57 IST	channel-used	https://www.youtube.com/watch?v=cNBY_2L_hYY	Filming The Training Montage | I PLAY ROCKY (2026) Movie CLIP 4K
