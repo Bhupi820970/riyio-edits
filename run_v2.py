@@ -69,15 +69,19 @@ def main():
     Path("remotion-props.json").write_text(json.dumps(props, indent=2))
     print("PROPS", len(words), "words,", len(action_paths), "actions")
 
-    # Remotion render if available, else FFmpeg fallback
+    # Try Remotion, always produce FFmpeg output
     remotion_out = Path("remotion/out/juraij.mp4")
-    if Path("remotion/node_modules").exists():
-        run(["npx", "--yes", "remotion", "render", "src/index.ts", "JuraijEdit", str(remotion_out), "--props", "../remotion-props.json"],)
-        base = remotion_out
-    else:
-        base = Path("out_base.mp4")
-        hook = props["hook"]
-        vf = f"scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,drawbox=x=0:y=0:w=1080:h=130:color=white@0.92:t=fill,drawtext=text='\"{hook}\"':fontcolor=black:fontsize=42:x=(w-text_w)/2:y=38"
+    base = Path("out_base.mp4")
+    try:
+        if Path("remotion/node_modules").exists():
+            run(["npx", "--yes", "remotion", "render", "src/index.ts", "JuraijEdit", str(remotion_out), "--props", "../remotion-props.json"])
+            if remotion_out.exists() and remotion_out.stat().st_size > 1000:
+                base = remotion_out
+    except Exception as e:
+        print("Remotion skipped:", e)
+    if not base.exists() or base.stat().st_size < 1000:
+        hook = props.get("hook", "Edit")
+        vf = "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,drawbox=x=0:y=0:w=1080:h=130:color=white@0.92:t=fill,drawtext=text=\\'" + hook + "\\':fontcolor=black:fontsize=42:x=(w-text_w)/2:y=38"
         run(["ffmpeg", "-y", "-i", str(dlg), "-vf", vf, "-c:v", "libx264", "-crf", "18", "-c:a", "aac", "-shortest", str(base)])
 
     final = Path("out.final.mp4")
