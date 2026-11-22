@@ -69,21 +69,42 @@ def main():
     Path("remotion-props.json").write_text(json.dumps(props, indent=2))
     print("PROPS", len(words), "words,", len(action_paths), "actions")
 
-    # Try Remotion, always produce FFmpeg output
-    remotion_out = Path("remotion/out/juraij.mp4")
-    base = Path("out_base.mp4")
-    try:
-        if Path("remotion/node_modules").exists():
-            run(["bash", "-c", "cd remotion && npx --yes @remotion/cli render src/index.ts JuraijEdit ../out_remotion.mp4 --props=../remotion-props.json || node_modules/.bin/remotion render src/index.ts JuraijEdit ../out_remotion.mp4 --props=../remotion-props.json"])
-            remotion_out = Path("out_remotion.mp4")
-            if remotion_out.exists() and remotion_out.stat().st_size > 1000:
-                base = remotion_out
-    except Exception as e:
-        print("Remotion skipped:", e)
-    if not base.exists() or base.stat().st_size < 1000:
-        hook = props.get("hook", "Edit")
-        vf = "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,drawbox=x=0:y=0:w=1080:h=130:color=white@0.92:t=fill,drawtext=text=\\'" + hook + "\\':fontcolor=black:fontsize=42:x=(w-text_w)/2:y=38"
-        run(["ffmpeg", "-y", "-i", str(dlg), "-vf", vf, "-c:v", "libx264", "-crf", "18", "-c:a", "aac", "-shortest", str(base)])
+    # Copy assets into remotion/public/assets and use relative paths
+    assets_dir = Path("remotion/public/assets")
+    assets_dir.mkdir(parents=True, exist_ok=True)
+    # clear old
+    for f in assets_dir.glob("*"):
+        f.unlink(missing_ok=True)
+    # copy dialogue + actions + song
+    import shutil
+    rel_dialogue = ""
+    if dlg.exists():
+        shutil.copy(dlg, assets_dir / "dialogue.mp4")
+        rel_dialogue = "assets/dialogue.mp4"
+    rel_actions = []
+    for i, ap in enumerate(action_paths):
+        srcp = Path(ap)
+        if srcp.exists():
+            dest = assets_dir / f"action_{i}.mp4"
+            shutil.copy(srcp, dest)
+            rel_actions.append(f"assets/action_{i}.mp4")
+    rel_song = ""
+    if song and song.exists():
+        shutil.copy(song, assets_dir / "song.mp3")
+        rel_song = "assets/song.mp3"
+    # rebuild props with relative paths
+    props["dialogueSrc"] = rel_dialogue
+    props["actionClips"] = rel_actions
+    props["songSrc"] = rel_song
+    Path("remotion-props.json").write_text(json.dumps(props, indent=2))
+    print("ASSETS ready", rel_dialogue, len(rel_actions), "actions")
+
+    # Remotion render only (no FFmpeg fallback)
+    remotion_out = Path("out_remotion.mp4")
+    run(["bash", "-c", "cd remotion && npx @remotion/cli render src/index.ts JuraijEdit ../out_remotion.mp4 --props=../remotion-props.json"])
+    if not remotion_out.exists() or remotion_out.stat().st_size < 1000:
+        raise RuntimeError("Remotion produced no output")
+    base = remotion_out
 
     final = Path("out.final.mp4")
     upscale_hdr(base, final)
