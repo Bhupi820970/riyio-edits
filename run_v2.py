@@ -103,7 +103,7 @@ def main():
 
     # Remotion render only (no FFmpeg fallback)
     remotion_out = Path("out_remotion.mp4")
-    run(["bash", "-c", "cd remotion && npx @remotion/cli render src/index.ts JuraijEdit ../out_remotion.mp4 --props=../remotion-props.json"])
+    run(["bash", "-c", "cd remotion && ./node_modules/.bin/remotion render src/index.ts JuraijEdit ../out_remotion.mp4 --props=../remotion-props.json || npx --no-install remotion render src/index.ts JuraijEdit ../out_remotion.mp4 --props=../remotion-props.json"])
     if not remotion_out.exists() or remotion_out.stat().st_size < 1000:
         raise RuntimeError("Remotion produced no output")
     base = remotion_out
