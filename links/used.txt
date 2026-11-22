@@ -1,1 +1,5 @@
 # Pipeline yahan khud likhta hai (haath se mat badlo): date<TAB>status<TAB>url<TAB>reason
+2026-11-22 18:16	rejected	https://www.youtube.com/watch?v=5bl0mb8U68w	pre-screen: A watermark/logo ('MG') is visible in the bottom-left corner of the first frame.
+2026-11-22 18:21	rejected	https://www.youtube.com/watch?v=56Db_eJDYMk	Gemini Pass 1 rejected: Movie trailer containing promotional logos and channel outro.
+2026-11-22 18:31	rejected	https://www.youtube.com/watch?v=zXQQzvwVPNw	cannot fit 35-60s (dialogue 17.1s)
+2026-11-22 18:37	channel-used	https://www.youtube.com/watch?v=owkyYjKFUvM	Biker Gang Vs Toxic Zombie | COLD STORAGE (2026) Movie CLIP 4K
