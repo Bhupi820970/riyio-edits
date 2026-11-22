@@ -74,7 +74,8 @@ def main():
     base = Path("out_base.mp4")
     try:
         if Path("remotion/node_modules").exists():
-            run(["npx", "--yes", "remotion", "render", "src/index.ts", "JuraijEdit", str(remotion_out), "--props", "../remotion-props.json"])
+            run(["bash", "-c", "cd remotion && npx --yes @remotion/cli render src/index.ts JuraijEdit ../out_remotion.mp4 --props=../remotion-props.json || node_modules/.bin/remotion render src/index.ts JuraijEdit ../out_remotion.mp4 --props=../remotion-props.json"])
+            remotion_out = Path("out_remotion.mp4")
             if remotion_out.exists() and remotion_out.stat().st_size > 1000:
                 base = remotion_out
     except Exception as e:
