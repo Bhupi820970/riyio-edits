@@ -18,20 +18,33 @@ def detect_beats(song: Path) -> dict:
         return {"tempo": 120.0, "beats": [i * 0.5 for i in range(80)], "drop": 12.0}
 
 _MODEL = None
+WHISPER_MODEL = "small"  # multilingual so non-English can be detected and rejected
 
 
 def _model():
     global _MODEL
     if _MODEL is None:
         from faster_whisper import WhisperModel
-        _MODEL = WhisperModel("base.en", device="cpu", compute_type="int8")
+        _MODEL = WhisperModel(WHISPER_MODEL, device="cpu", compute_type="int8")
     return _MODEL
 
 
-def whisper_words(clip: Path) -> list[dict]:
-    """Word-level timestamps (seconds, relative to clip start)."""
+def detect_language(clip: Path) -> tuple[str, float]:
+    """Spoken language of the clip (detection runs on the first 30s only)."""
     try:
-        segments, _ = _model().transcribe(str(clip), word_timestamps=True)
+        _, info = _model().transcribe(str(clip), language=None, vad_filter=True)
+        return (info.language or "?"), float(info.language_probability or 0.0)
+    except Exception as e:
+        print("LANG detect error:", repr(e)[:300], flush=True)
+        return "?", 0.0
+
+
+def whisper_words(clip: Path, language: str = "en") -> list[dict]:
+    """Word-level timestamps (seconds, relative to clip start). English only by default."""
+    try:
+        segments, _ = _model().transcribe(str(clip), language=language, word_timestamps=True,
+                                          vad_filter=True, beam_size=5,
+                                          condition_on_previous_text=False)
         words = []
         for seg in segments:
             for w in (seg.words or []):

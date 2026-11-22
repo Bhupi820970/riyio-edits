@@ -106,6 +106,44 @@ def rapid_download(url: str, out: Path, fmt: str = "1080") -> dict:
         raise RapidAPIError("file fetch failed")
     return {"title": job.get("title") or "", "id": job.get("id") or "", "path": str(out)}
 
+OFFICIAL_HINTS = ("official", "movieclips", "clips", "studios", "pictures", "films", "entertainment",
+                  "tv", "channel", "originals", "fandango", "amc", "bbc", "fx", "a24", "lionsgate",
+                  "paramount", "universal", "20th century", "focus features", "toho", "aniplex")
+BAD_HINTS = ("edit", "status", "whatsapp", "tiktok", "amv", "lyrics", "reaction", "explained", "review",
+             "trailer trash", "compilation", "visuals", "fan made", "fanmade", "parody", "breakdown",
+             "#shorts", "shorts", "ranking", "top 10", "hindi", "dubbed in", "tamil", "telugu")
+
+
+def _rank(it: dict, query: str) -> int:
+    """Prefer official channel uploads of the actual scene; push fan edits/reactions down."""
+    t, ch = it["title"].lower(), (it["channel"] or "").lower()
+    score = 0
+    if any(h in ch for h in OFFICIAL_HINTS):
+        score += 3
+    if "scene" in t or "clip" in t:
+        score += 2
+    if "4k" in t or "1080" in t or "hd" in t.split():
+        score += 1
+    if any(b in t or b in ch for b in BAD_HINTS):
+        score -= 5
+    words = [w for w in query.lower().split() if len(w) > 3 and w not in ("scene", "english")]
+    score += sum(1 for w in words if w in t)
+    return score
+
+
+def download_bank_song(fname: str, out: Path) -> Path | None:
+    """One named track from the public songs-bank release."""
+    repo = os.environ.get("REPO", "Bhupi820970/riyio-edits")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    url = f"https://github.com/{repo}/releases/download/songs-bank/{fname}"
+    r = subprocess.run(["curl", "-fsSL", "-L", "-o", str(out), url], capture_output=True, text=True, timeout=180)
+    if r.returncode == 0 and out.exists() and out.stat().st_size >= 50_000:
+        print("SONG from songs-bank", fname, out.stat().st_size, flush=True)
+        return out
+    out.unlink(missing_ok=True)
+    return None
+
+
 def search_and_download(query: str, out: Path, exclude: set | None = None) -> dict | None:
     print("RapidAPI search:", query[:50])
     try:
@@ -114,6 +152,7 @@ def search_and_download(query: str, out: Path, exclude: set | None = None) -> di
         print("search fail", e)
         return None
     print("got", len(results), "results")
+    results = sorted(results[:12], key=lambda it: -_rank(it, query))
     for it in results[:6]:
         if is_blacklisted(it["title"], it["channel"]):
             print("skip", it["title"][:40])

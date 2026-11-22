@@ -3,13 +3,15 @@ from __future__ import annotations
 import os, subprocess
 from pathlib import Path
 
-GRADE = "scale=2160:2700:flags=lanczos,eq=contrast=1.16:brightness=-0.04:saturation=1.15,unsharp=5:5:1.2:5:5:0.0,vignette=PI/5"
+# Grade + sharpen are applied per clip before Remotion (pipeline_lib/style.py); here only a clean 4K upscale.
+GRADE = "scale=2160:2700:flags=lanczos,unsharp=3:3:0.4:3:3:0.0"
 
-def upscale_hdr(src: Path, out: Path, preset: str = "medium"):
+def upscale_hdr(src: Path, out: Path, preset: str = "slow"):
     cmd = [
         "ffmpeg", "-y", "-i", str(src),
         "-vf", GRADE,
-        "-c:v", "libx264", "-crf", "16", "-preset", preset, "-pix_fmt", "yuv420p",
+        "-c:v", "libx264", "-crf", "16", "-preset", preset, "-profile:v", "high", "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart",
         "-c:a", "aac", "-b:a", "192k",
         str(out),
     ]

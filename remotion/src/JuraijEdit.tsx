@@ -1,124 +1,195 @@
 import React from 'react';
 import {AbsoluteFill, Audio, OffthreadVideo, Sequence, staticFile, useCurrentFrame, useVideoConfig, spring, interpolate} from 'remotion';
 
-type Word = {word: string; s: number; e: number};
+// RIYIO reference style — see docs/REFERENCE_STYLE.md
+type CapWord = {w: string; s: number; e: number};
+type Caption = {start: number; end: number; words: CapWord[]; color: string; italic: boolean; key: number; stroke: number; punch: boolean};
 export type JuraijProps = {
-  hook: string;
+  hook: string;            // white top banner title (whole video)
+  hookQuestion: string;    // first caption at 0s
   dialogueSrc: string;
-  dialogueFrames: number;
+  dialogueFrames: number;  // phase 1 length (ends on the first kick after the punch word)
+  dropFrame: number;       // punch word start = beat drop
   actionClips: string[];
   actionFrames: number[];
-  words: Word[];
-  songSrc: string;
-  songTrimBefore: number; // frames trimmed off song start so its beat drop lands on beatDropFrame
-  songDelay: number; // frames to wait before song starts (if drop is earlier in song than dialogue end)
-  beatDropFrame: number; // == dialogueFrames (exact end of dialogue)
+  endFrames: number;
+  captions: Caption[];
+  bedSrc: string;
+  bedVolume: number;
+  dropSrc: string;
+  dropTrimBefore: number;
+  hitSrc: string;
+  whooshSrc: string;
   durationInFrames: number;
 };
 
-const COLORS = ['#38BDF8', '#FB923C', '#F43F5E', '#FACC15', '#34D399', '#FFFFFF'];
+const SERIF = '"Playfair Display", "P052", "Liberation Serif", "Nimbus Roman", "Times New Roman", serif';
+const CURSIVE = '"Z003", "URW Chancery L", "Brush Script MT", cursive';
 
-// One beat-synced action clip with a spring zoom punch 1.0x -> 1.12x.
 const ActionClip: React.FC<{src: string}> = ({src}) => {
   const frame = useCurrentFrame();
-  const {fps} = useVideoConfig();
-  const punch = spring({frame, fps, config: {damping: 14, stiffness: 220}});
-  const zoom = 1 + 0.12 * punch;
+  const zoom = interpolate(frame, [0, 10], [1.1, 1.0], {extrapolateRight: 'clamp'});
+  const flash = interpolate(frame, [0, 3], [0.6, 0], {extrapolateRight: 'clamp'});
   return (
-    <OffthreadVideo src={staticFile(src)} muted
-      style={{width: '100%', height: '100%', objectFit: 'cover', transform: `scale(${zoom})`}} />
+    <AbsoluteFill>
+      <OffthreadVideo src={staticFile(src)} muted style={{width: '100%', height: '100%', transform: `scale(${zoom})`}} />
+      {flash > 0 && <AbsoluteFill style={{backgroundColor: '#fff', opacity: flash}} />}
+    </AbsoluteFill>
   );
 };
 
-export const JuraijEdit: React.FC<JuraijProps> = ({
-  hook, dialogueSrc, dialogueFrames, actionClips, actionFrames, words,
-  songSrc, songTrimBefore, songDelay, beatDropFrame,
-}) => {
-  const frame = useCurrentFrame();
-  const {fps} = useVideoConfig();
-  const drop = beatDropFrame || dialogueFrames;
-  const t = frame / fps;
-  // Hook bar: first 6s only (short fade in the last 0.3s)
-  const barOpacity = interpolate(frame, [0, 5.7 * fps, 6 * fps], [1, 1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
-  const flashFrames = Math.max(1, Math.round(0.12 * fps));
+const CaptionView: React.FC<{c: Caption; t: number; frame: number; fps: number}> = ({c, t, frame, fps}) => {
+  const startF = Math.round(c.start * fps);
+  const pop = spring({frame: frame - startF, fps, config: {damping: 12, stiffness: 260}, durationInFrames: 6});
+  const scale = 1.2 - 0.2 * pop;
+  const glow = `0 0 15px ${c.color}, 0 0 4px ${c.color}, 0 4px 10px rgba(0,0,0,0.95), 0 1px 2px #000`;
+  const shake = c.punch ? `translate(${Math.sin(frame * 2.3) * 5}px, ${Math.cos(frame * 3.1) * 4}px)` : '';
+  return (
+    <div style={{
+      position: 'absolute', top: '52%', left: 50, right: 50, textAlign: 'center',
+      transform: `scale(${scale}) ${shake}`, zIndex: 25, lineHeight: 1.1,
+      fontFamily: SERIF, fontWeight: 800, fontSize: c.punch ? 104 : 60, letterSpacing: 1.5,
+      fontStyle: c.italic ? 'italic' : 'normal',
+    }}>
+      {c.words.map((w, i) => {
+        const spoken = t >= w.s - 0.04;
+        const isKey = i === c.key && c.words.length > 1;
+        const isStroke = i === c.stroke;
+        const text = c.italic ? w.w : w.w.toUpperCase();
+        return (
+          <span key={i} style={{
+            opacity: spoken ? 1 : 0,
+            color: isStroke ? 'transparent' : (c.punch ? '#F43F5E' : isKey ? c.color : '#FFFFFF'),
+            WebkitTextStroke: isStroke ? '2.5px #EF4444' : undefined,
+            textShadow: isStroke ? '0 0 12px rgba(239,68,68,0.8)' : glow,
+            marginRight: 16, display: 'inline-block',
+          }}>{text}</span>
+        );
+      })}
+    </div>
+  );
+};
 
-  // action sequences laid back-to-back right after the drop
-  let cursor = drop;
-  const seqs = actionClips.map((src, i) => {
-    const len = Math.max(1, Math.round(actionFrames[i] || 0.6 * fps));
+export const JuraijEdit: React.FC<JuraijProps> = (p) => {
+  const frame = useCurrentFrame();
+  const {fps, durationInFrames} = useVideoConfig();
+  const t = frame / fps;
+  const D = p.dialogueFrames;
+  const flashLen = 4;
+
+  // montage cut layout right after phase 1
+  let cursor = D;
+  const seqs = p.actionClips.map((src, i) => {
+    const len = Math.max(1, Math.round(p.actionFrames[i] || 0.45 * fps));
     const from = cursor;
     cursor += len;
     return {src, from, len};
   });
+  const endFrom = cursor;
+  const inDialogue = frame < D;
+  const inEnd = frame >= endFrom;
 
-  const activeWord = frame < dialogueFrames ? words.findIndex((w) => t >= w.s && t <= w.e) : -1;
+  // hook question = first caption at 0s
+  const firstCap = p.captions.length ? p.captions[0].start : 2;
+  const hqEnd = Math.min(2.6, Math.max(1.3, firstCap));
+  const showHQ = t < hqEnd && !!p.hookQuestion;
+  const cap = inDialogue && !showHQ ? p.captions.find((c) => t >= c.start && t < c.end) : undefined;
+
+  // small cursive watermark fades in/out
+  const wmCycle = (frame % (8 * fps)) / fps;
+  const wmOpacity = interpolate(wmCycle, [0, 1, 4, 5, 8], [0, 0.55, 0.55, 0, 0], {extrapolateRight: 'clamp'});
+
+  const endF = frame - endFrom;
+  const endPop = spring({frame: endF, fps, config: {damping: 14}});
 
   return (
     <AbsoluteFill style={{backgroundColor: '#000'}}>
-      {/* Dialogue build-up: original dialogue at 1.0 */}
-      {dialogueSrc && dialogueFrames > 0 ? (
-        <Sequence from={0} durationInFrames={dialogueFrames}>
-          <OffthreadVideo src={staticFile(dialogueSrc)} volume={1}
-            style={{width: '100%', height: '100%', objectFit: 'cover'}} />
+      {/* Phase 1: continuous dialogue scene (pre-graded, no crop, blurred fill) */}
+      {p.dialogueSrc && D > 0 ? (
+        <Sequence from={0} durationInFrames={D}>
+          <OffthreadVideo src={staticFile(p.dialogueSrc)} volume={1} style={{width: '100%', height: '100%'}} />
         </Sequence>
       ) : null}
 
-      {/* Beat-drop action cuts (dialogue muted, music only) */}
+      {/* Phase 2: beat-synced montage, music only */}
       {seqs.map((s, i) => (
         <Sequence key={i} from={s.from} durationInFrames={s.len}>
           <ActionClip src={s.src} />
         </Sequence>
       ))}
 
-      {/* 0.12s crisp white flash on the drop */}
-      {frame >= drop && frame < drop + flashFrames && (
-        <AbsoluteFill style={{backgroundColor: '#fff', zIndex: 30}} />
+      {/* Drop flash on the punch word */}
+      {frame >= p.dropFrame && frame < p.dropFrame + flashLen && (
+        <AbsoluteFill style={{backgroundColor: '#fff', zIndex: 30,
+          opacity: interpolate(frame - p.dropFrame, [0, flashLen], [1, 0])}} />
       )}
 
-      {/* Top hook bar - first 6s */}
-      {barOpacity > 0.01 && (
+      {/* End card */}
+      {inEnd && (
+        <AbsoluteFill style={{backgroundColor: '#050505', alignItems: 'center', justifyContent: 'center', zIndex: 26}}>
+          <div style={{
+            fontFamily: SERIF, fontWeight: 800, fontSize: 84, color: '#fff', letterSpacing: 6,
+            textShadow: '0 0 18px #fff, 0 0 42px #38BDF8, 0 0 80px #38BDF8',
+            transform: `scale(${0.85 + 0.15 * endPop})`, opacity: endPop,
+          }}>MADE BY RIYIO</div>
+        </AbsoluteFill>
+      )}
+
+      {/* White top hook banner, black bold title — whole video */}
+      {!inEnd && (
         <div style={{
-          position: 'absolute', top: 0, left: 0, right: 0, height: '8%',
-          background: '#FFFFFF', opacity: barOpacity,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 20, boxShadow: '0 6px 16px rgba(0,0,0,0.35)',
+          position: 'absolute', top: 0, left: 0, right: 0, height: '10%', background: '#FFFFFF',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 20,
         }}>
-          <span style={{color: '#000', fontSize: 44, fontWeight: 800, fontFamily: 'sans-serif'}}>
-            "{hook}"
+          <span style={{color: '#000', fontSize: 54, fontWeight: 800, fontFamily: SERIF, padding: '0 30px', textAlign: 'center'}}>
+            “{p.hook}”
           </span>
         </div>
       )}
 
-      {/* Word-by-word captions, synced to whisper word timestamps */}
-      {activeWord >= 0 && (() => {
-        const w = words[activeWord];
-        const color = COLORS[activeWord % COLORS.length];
-        return (
-          <div style={{
-            position: 'absolute', bottom: '18%', left: 40, right: 40,
-            textAlign: 'center', color, fontSize: 64, fontWeight: 900,
-            textShadow: `0 0 22px ${color}, 0 0 8px ${color}, 0 6px 14px #000, 0 2px 4px #000`,
-            fontFamily: 'sans-serif', letterSpacing: 1.2, zIndex: 25,
-          }}>
-            {w.word.toUpperCase()}
-          </div>
-        );
-      })()}
+      {/* Hook question (first caption) */}
+      {showHQ && (
+        <CaptionView c={{start: 0, end: hqEnd, words: p.hookQuestion.split(' ').map((w) => ({w, s: 0, e: hqEnd})),
+          color: '#F43F5E', italic: false, key: -1, stroke: -1, punch: false}} t={t} frame={frame} fps={fps} />
+      )}
 
-      {/* RIYIO watermark */}
-      <div style={{
-        position: 'absolute', bottom: 36, left: 0, right: 0, textAlign: 'center',
-        color: '#fff', fontSize: 30, fontFamily: 'serif', opacity: 0.75,
-        textShadow: '0 0 14px #fff', zIndex: 15,
-      }}>
-        RIYIO
-      </div>
+      {/* Word-synced captions (phase 1 only) */}
+      {cap ? <CaptionView c={cap} t={t} frame={frame} fps={fps} /> : null}
 
-      {/* Song: ducked 0.25 under dialogue, slams to 1.0 on the drop */}
-      {songSrc ? (
-        <Sequence from={Math.max(0, songDelay || 0)}>
-          <Audio src={staticFile(songSrc)} trimBefore={Math.max(0, songTrimBefore || 0)}
-            volume={(f) => (f + Math.max(0, songDelay || 0) >= drop ? 1 : 0.25)} />
+      {/* Small RIYIO watermark */}
+      {!inEnd && (
+        <div style={{
+          position: 'absolute', bottom: 70, right: 60, color: '#fff', fontSize: 40, fontFamily: CURSIVE,
+          opacity: wmOpacity, textShadow: '0 0 10px rgba(255,255,255,0.8)', zIndex: 15,
+        }}>Riyio</div>
+      )}
+
+      {/* Audio: dark bed ducked ~-11dB under dialogue -> drop at 0dB on the punch word */}
+      {p.bedSrc ? (
+        <Sequence from={0} durationInFrames={Math.max(1, p.dropFrame + 3)}>
+          <Audio src={staticFile(p.bedSrc)}
+            volume={(f) => p.bedVolume * interpolate(f, [0, 15, Math.max(16, p.dropFrame - 2), Math.max(17, p.dropFrame + 3)], [0, 1, 1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'})} />
+        </Sequence>
+      ) : null}
+      {p.dropSrc ? (
+        <Sequence from={p.dropFrame}>
+          <Audio src={staticFile(p.dropSrc)} trimBefore={Math.max(0, p.dropTrimBefore)}
+            volume={(f) => interpolate(f + p.dropFrame, [durationInFrames - fps, durationInFrames], [1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'})} />
+        </Sequence>
+      ) : null}
+      {p.hitSrc ? (
+        <Sequence from={p.dropFrame} durationInFrames={21}>
+          <Audio src={staticFile(p.hitSrc)} volume={0.9} />
+        </Sequence>
+      ) : null}
+      {p.whooshSrc ? seqs.filter((_, i) => i % 3 === 2).map((s, i) => (
+        <Sequence key={`w${i}`} from={Math.max(0, s.from - 6)} durationInFrames={14}>
+          <Audio src={staticFile(p.whooshSrc)} volume={0.35} />
+        </Sequence>
+      )) : null}
+      {p.whooshSrc ? (
+        <Sequence from={Math.max(0, endFrom - 8)} durationInFrames={14}>
+          <Audio src={staticFile(p.whooshSrc)} volume={0.5} />
         </Sequence>
       ) : null}
     </AbsoluteFill>

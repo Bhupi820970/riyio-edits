@@ -1,9 +1,9 @@
 import {Composition, CalculateMetadataFunction} from 'remotion';
 import {JuraijEdit, JuraijProps} from './JuraijEdit';
 
-// Total length = exact sum of dialogue + action clip frames (sent by run_v2.py from ffprobe).
+// Total length = exact sum of dialogue + montage + end card frames (computed by run_v2.py from ffprobe).
 const calculateMetadata: CalculateMetadataFunction<JuraijProps> = ({props}) => {
-  const sum = (props.dialogueFrames || 0) + (props.actionFrames || []).reduce((a, b) => a + b, 0);
+  const sum = (props.dialogueFrames || 0) + (props.actionFrames || []).reduce((a, b) => a + b, 0) + (props.endFrames || 0);
   return {durationInFrames: Math.max(1, props.durationInFrames || sum)};
 };
 
@@ -18,16 +18,21 @@ export const RemotionRoot: React.FC = () => {
       width={1080}
       height={1350}
       defaultProps={{
-        hook: "Winter is finally here",
+        hook: "",
+        hookQuestion: "",
         dialogueSrc: "",
         dialogueFrames: 0,
+        dropFrame: 0,
         actionClips: [],
         actionFrames: [],
-        words: [],
-        songSrc: "",
-        songTrimBefore: 0,
-        songDelay: 0,
-        beatDropFrame: 0,
+        endFrames: 60,
+        captions: [],
+        bedSrc: "",
+        bedVolume: 0.28,
+        dropSrc: "",
+        dropTrimBefore: 0,
+        hitSrc: "",
+        whooshSrc: "",
         durationInFrames: 0,
       }}
     />
