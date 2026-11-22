@@ -62,6 +62,10 @@ def analyze(video_360p: Path) -> dict:
                 text = (resp.text or "").strip()
                 if text.startswith("```"):
                     text = text.split("```")[1].lstrip("json").strip()
+                text = text.strip()
+                if text.startswith("```"):
+                    text = text.split("\n", 1)[-1].rsplit("```", 1)[0]
+                print("GEMINI RAW:", text[:500], flush=True)
                 data = json.loads(text)
                 try:
                     client.files.delete(name=f.name)
