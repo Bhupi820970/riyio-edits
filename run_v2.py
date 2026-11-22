@@ -2,7 +2,6 @@
 from __future__ import annotations
 import traceback
 
-from __future__ import annotations
 import json, os, subprocess
 from pathlib import Path
 
