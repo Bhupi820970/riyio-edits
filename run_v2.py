@@ -116,7 +116,11 @@ def find_speech_window(src, dur, avoid_start, length=18.0, scan=300.0):
             best, best_n = (lo + start, lo + min(end, hi - lo)), n
     if best_n < MIN_WORDS:
         return None
-    return best
+    # scan words re-based to the new window (fallback if a re-transcribe of the short cut misses words)
+    a, b = best
+    sub = [{"word": x["word"], "s": round(lo + x["s"] - a, 3), "e": round(lo + x["e"] - a, 3)}
+           for x in ws if lo + x["s"] >= a and lo + x["e"] <= b]
+    return a, b, sub
 
 
 def beat_action_len(beats):
@@ -180,9 +184,11 @@ def build_draft(query, used_urls, demo, cand):
         win = find_speech_window(src, dur, ds)
         if not win:
             raise CandidateRejected(f"no speech segment with >= {MIN_WORDS} words")
-        ds, de = win
+        ds, de, scan_words = win
         ffmpeg_cut(src, dlg, ds, de - ds, audio=True)
         words = whisper_words(dlg)
+        if len(words) < len(scan_words):
+            words = scan_words
         print("WORDS", len(words), f"window {ds:.1f}-{de:.1f}s (shifted)", flush=True)
         if len(words) < MIN_WORDS:
             raise CandidateRejected(f"only {len(words)} words after shift")
