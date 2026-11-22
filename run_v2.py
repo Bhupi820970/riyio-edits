@@ -1,3 +1,4 @@
+import traceback
 """riyio-v2 full: RapidAPI -> Gemini -> cuts -> Remotion props -> FFmpeg fallback."""
 from __future__ import annotations
 import json, os, subprocess
@@ -29,7 +30,7 @@ def main():
     print("DOWNLOADED", info.get("title"), info.get("channel"))
 
     prev = Path("preview360.mp4")
-    run(["ffmpeg", "-y", "-i", str(src), "-vf", "scale=-2:360", "-c:v", "libx264", "-crf", "28", "-an", str(prev)])
+    run(["ffmpeg", "-y", "-i", str(src), "-vf", "scale=-2:360", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28", "-c:a", "aac", "-b:a", "64k", str(prev)])
 
     plan = analyze(prev) if gemini_ok() else {
         "dialogue_start": 8, "dialogue_end": 24, "action_cuts": [30, 35, 40, 45, 50],
@@ -112,4 +113,8 @@ def main():
     buffer_post("", props["post_caption"], demo)
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        traceback.print_exc()
+        raise
