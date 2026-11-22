@@ -47,11 +47,17 @@ def analyze(video_360p: Path) -> dict:
             try:
                 client = genai.Client(api_key=key)
                 f = client.files.upload(file=str(video_360p))
-                for _ in range(30):
-                    if getattr(getattr(f, "state", None), "name", "") != "PROCESSING":
+                for _ in range(60):
+                    state = getattr(getattr(f, "state", None), "name", "")
+                    print("gemini file state:", state)
+                    if state == "ACTIVE":
                         break
-                    time.sleep(2)
+                    if state == "FAILED":
+                        raise RuntimeError("Gemini file processing failed")
+                    time.sleep(3)
                     f = client.files.get(name=f.name)
+                else:
+                    raise RuntimeError("Gemini file never became ACTIVE")
                 resp = client.models.generate_content(model=model, contents=[PROMPT, f])
                 text = (resp.text or "").strip()
                 if text.startswith("```"):
