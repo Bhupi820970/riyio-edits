@@ -1,5 +1,5 @@
 import React from 'react';
-import {AbsoluteFill, Audio, Img, Sequence, useCurrentFrame, useVideoConfig, spring, interpolate} from 'remotion';
+import {AbsoluteFill, staticFile, Audio, Img, Sequence, useCurrentFrame, useVideoConfig, spring, interpolate} from 'remotion';
 
 type Word = {word: string; s: number; e: number};
 type Props = {
@@ -37,12 +37,12 @@ export const JuraijEdit: React.FC<Props> = ({hook, dialogueSrc, actionClips, wor
       {/* Dialogue or action */}
       {!isDrop && dialogueSrc ? (
         <Sequence from={0}>
-          <Img src={dialogueSrc} style={{width: '100%', height: '100%', objectFit: 'cover', transform: `scale(${zoom})`}} />
+          <Img src={dialogueSrc ? staticFile(dialogueSrc) : undefined} style={{width: '100%', height: '100%', objectFit: 'cover', transform: `scale(${zoom})`}} />
         </Sequence>
       ) : null}
       {isDrop && actionClips.map((src, i) => (
         <Sequence key={i} from={beatDropFrame + i * 18} durationInFrames={18}>
-          <Img src={src} style={{width: '100%', height: '100%', objectFit: 'cover', transform: `scale(${zoom})`}} />
+          <Img src={src ? staticFile(src) : undefined} style={{width: '100%', height: '100%', objectFit: 'cover', transform: `scale(${zoom})`}} />
         </Sequence>
       ))}
 
@@ -74,7 +74,7 @@ export const JuraijEdit: React.FC<Props> = ({hook, dialogueSrc, actionClips, wor
       </div>
 
       {/* Audio */}
-      {songSrc && <Audio src={songSrc} volume={isDrop ? 1 : 0.25} />}
+      {songSrc && <Audio src={songSrc ? staticFile(songSrc) : undefined} volume={isDrop ? 1 : 0.25} />}
     </AbsoluteFill>
   );
 };
