@@ -1,3 +1,26 @@
+
+NICHE_QUERIES = [
+    "Interstellar docking scene 4K",
+    "The Dark Knight interrogation scene",
+    "Peaky Blinders iconic scene",
+    "Oppenheimer Trinity test scene",
+    "John Wick nightclub fight scene",
+    "Gladiator Are you not entertained",
+    "Game of Thrones Rains of Castamere",
+    "Breaking Bad I am the one who knocks",
+    "Stranger Things upside down scene",
+    "Money Heist Bella Ciao scene",
+    "Attack on Titan Eren transformation",
+    "Solo Leveling Jinwoo shadow",
+    "Jujutsu Kaisen Gojo domain",
+    "Naruto vs Pain scene",
+    "La La Land planetarium scene",
+    "Titanic I'm flying scene",
+    "The Notebook rain kiss",
+    "Champions League iconic goal",
+    "Formula 1 overtake radio",
+]
+import random
 """riyio-v2 full: RapidAPI -> Gemini -> cuts -> Remotion props -> FFmpeg fallback."""
 from __future__ import annotations
 import traceback
@@ -60,7 +83,7 @@ def ffmpeg_cut(src, dest, start, duration, audio=True):
 
 def main():
     demo = os.environ.get("DEMO_ONLY", "false").lower() in ("1", "true", "yes")
-    query = os.environ.get("QUERY", "Game of Thrones iconic scene 4K no subtitles")
+    query = os.environ.get("QUERY") or random.choice(NICHE_QUERIES)
     print("DEMO", demo, "GEMINI", gemini_ok())
 
     Path("clips").mkdir(exist_ok=True)
