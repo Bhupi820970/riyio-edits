@@ -3,7 +3,7 @@ RapidAPI -> Gemini Pass 1 (director) -> graded no-crop 4:5 cuts -> whisper words
 -> Gemini Pass 2 (QC inspector) -> 4K upscale -> Buffer."""
 from __future__ import annotations
 import traceback
-import json, os, subprocess, shutil, random, math
+import json, os, re, subprocess, shutil, random, math
 from pathlib import Path
 
 from pipeline_lib.gemini_brain import analyze, qc_inspect, prescreen, available as gemini_ok
@@ -144,6 +144,23 @@ class CandidateRejected(RuntimeError):
     pass
 
 
+OUTRO_S = 20.0         # clip channels end with an end screen / "subscribe" outro: never use the last 20s
+OUTRO_RE = re.compile(r"^(subscribe|subscribed|subscribing|notification|notifications|patreon|channel|bell|joblo|movieclips)$")
+
+
+def usable_end(dur):
+    return dur - min(OUTRO_S, dur * 0.1)
+
+
+def cut_outro(words):
+    """Drop everything from the first outro word ('subscribe', 'channel', ...) on, plus the 3 words before it."""
+    for i, w in enumerate(words):
+        if OUTRO_RE.match(style.clean(w.get("word", "")).lower()):
+            print(f"OUTRO speech at {w['s']:.1f}s ('{w['word']}') -> words cut there", flush=True)
+            return words[: max(0, i - 3)]
+    return words
+
+
 def min_start(dur):
     return INTRO_SKIP if dur > 60 else 0.0
 
@@ -205,10 +222,10 @@ def make_sfx(assets_dir):
 def find_speech_window(src, dur, length=40.0, scan=240.0, min_words=MIN_WORDS):
     """Transcribe up to `scan` seconds after the intro and return the densest-speech window."""
     lo = min_start(dur)
-    hi = min(dur, lo + scan)
+    hi = min(usable_end(dur), lo + scan)
     if hi - lo < DLG_MIN:
         return None
-    ws = whisper_words(extract_wav(src, Path("clips/scan.wav"), lo, hi - lo))
+    ws = cut_outro(whisper_words(extract_wav(src, Path("clips/scan.wav"), lo, hi - lo)))
     print("SCAN words", len(ws), f"in {lo:.0f}-{hi:.0f}s", flush=True)
     if len(ws) < min_words:
         return None
@@ -230,7 +247,7 @@ def transcribe_window(src, ds, length):
     print(f"LANG {lang} p={prob:.2f}", flush=True)
     if lang not in ("en", "?") and prob > 0.5:
         raise CandidateRejected(f"not English ({lang} p={prob:.2f})")
-    words = whisper_words(wav, language="en")
+    words = cut_outro(whisper_words(wav, language="en"))
     print("WORDS", len(words), f"window {ds:.1f}-{ds + length:.1f}s", flush=True)
     return words, lang
 
@@ -299,7 +316,8 @@ def build_draft(src, info, dur, w, h, query, demo, cand):
     LETTERBOX["crop"] = detect_letterbox(src, dur, w, h)
 
     prev = Path("preview360.mp4")
-    run(["ffmpeg", "-y", "-i", str(src), "-vf", "scale=-2:360", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28", "-c:a", "aac", "-b:a", "64k", str(prev)])
+    # preview stops before the channel outro / end screen, so Gemini never judges or picks it
+    run(["ffmpeg", "-y", "-i", str(src), "-t", f"{usable_end(dur):.2f}", "-vf", "scale=-2:360", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28", "-c:a", "aac", "-b:a", "64k", str(prev)])
 
     print("[2] Gemini Pass 1 (director)", flush=True)
     plan = analyze(prev, genre) if gemini_ok() else {"dialogue_start": 15, "dialogue_end": 50, "action_cuts": [], "mood": "dark_hype"}
@@ -311,11 +329,21 @@ def build_draft(src, info, dur, w, h, query, demo, cand):
     lo = min_start(dur)
 
     # ---- dialogue window (phase 1) ----
+    ue = usable_end(dur)
     ds = max(lo, _num(plan.get("dialogue_start"), lo))
-    de = min(dur - 0.5, _num(plan.get("dialogue_end"), ds + 40))
+    bad_plan = ds > ue - DLG_MIN or _num(plan.get("dialogue_end"), 0) > dur
+    if bad_plan:  # Gemini timestamps beyond the clip (or inside the outro): find the scene by speech instead
+        print(f"Gemini window {plan.get('dialogue_start')}-{plan.get('dialogue_end')}s is outside the usable "
+              f"0-{ue:.0f}s -> speech scan", flush=True)
+        win = find_speech_window(src, dur, scan=min(ue - lo, 420.0), min_words=min_words)
+        if not win:
+            raise CandidateRejected("Gemini window out of range and no speech segment found")
+        ds, de = win
+        plan["punch_time"] = None
+    de = min(ue, _num(plan.get("dialogue_end"), ds + 40)) if not bad_plan else min(ue, de)
     punch_abs = plan.get("punch_time")
     punch_abs = _num(punch_abs, de - 1) if punch_abs not in (None, "") else None
-    if punch_abs is not None and ds < punch_abs < dur:
+    if punch_abs is not None and ds < punch_abs < ue:
         de = max(de, punch_abs + 1.0)
     if de - ds < DLG_MIN + 1:
         ds = max(lo, de - (DLG_MIN + 3))
@@ -323,7 +351,7 @@ def build_draft(src, info, dur, w, h, query, demo, cand):
         ds = de - (DLG_MAX + 1)
     if de - ds < 20:
         raise CandidateRejected(f"dialogue window too short {ds:.1f}-{de:.1f}")
-    win_len = min(dur - ds, de - ds + 1.5)
+    win_len = min(ue - ds, de - ds + 1.5)
     words, lang = transcribe_window(src, ds, win_len)
     if len(words) < min_words:
         print("too few words -> shifting to highest-speech segment", flush=True)
@@ -405,7 +433,7 @@ def build_draft(src, info, dur, w, h, query, demo, cand):
             t = float(t)
         except Exception:
             continue
-        if lo <= t <= dur - 1.0 and not (used_lo <= t <= used_hi) and all(abs(t - p) > 0.6 for p in picks):
+        if lo <= t <= ue - 1.0 and not (used_lo <= t <= used_hi) and all(abs(t - p) > 0.6 for p in picks):
             picks.append(t)
     k = 0
     base = list(picks)
@@ -413,10 +441,10 @@ def build_draft(src, info, dur, w, h, query, demo, cand):
         k += 1
         for t in base:
             t2 = t + 1.1 * k
-            if t2 <= dur - 1.0 and not (used_lo <= t2 <= used_hi) and all(abs(t2 - p) > 0.6 for p in picks):
+            if t2 <= ue - 1.0 and not (used_lo <= t2 <= used_hi) and all(abs(t2 - p) > 0.6 for p in picks):
                 picks.append(t2)
     if len(picks) < len(cuts):
-        span = [x * 0.5 for x in range(int(lo * 2), int((dur - 1) * 2))]
+        span = [x * 0.5 for x in range(int(lo * 2), int((ue - 1) * 2))]
         span = [t for t in span if not (used_lo <= t <= used_hi) and all(abs(t - p) > 0.6 for p in picks)]
         step = max(1, len(span) // max(1, len(cuts) - len(picks) + 1))
         picks += span[step::step][: len(cuts) - len(picks)]

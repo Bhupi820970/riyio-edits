@@ -13,7 +13,7 @@ except ImportError:
 KEYS = [os.environ.get("GEMINI_API_KEY_1"), os.environ.get("GEMINI_API_KEY_2"), os.environ.get("GEMINI_API_KEY")]
 KEYS = [k for k in KEYS if k]
 # gemini-2.5-* now return 404 for these keys (Nov 2026); working 3.x models first, older fallbacks last.
-MODELS = ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.8-flash-lite", "gemini-2.0-flash"]
+MODELS = ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite"]  # 3.8-flash-lite / 2.0-flash: 404 (Nov 2026)
 QC_MODELS = MODELS
 
 PROMPT = '''You are the director of a RIYIO cinematic short (vertical 4:5, 35-60s total). Genre: {genre}.
@@ -147,7 +147,7 @@ def prescreen(frames: list[Path]) -> dict:
     def make(client):
         parts = [types.Part.from_bytes(data=Path(fp).read_bytes(), mime_type="image/jpeg") for fp in frames]
         return parts, (lambda: None)
-    order = ["gemini-3.5-flash-lite", "gemini-3.8-flash-lite", "gemini-3.5-flash", "gemini-3.8-flash", "gemini-2.0-flash"]
+    order = ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3.8-flash"]
     data, model = _generate(make, PRESCREEN_PROMPT.format(n=len(frames)), order, "PRESCREEN")
     flags = [k for k in ("logo", "subtitles", "fan_edit") if data.get(k)]
     clean = bool(data.get("clean", not flags)) and not flags
@@ -176,7 +176,9 @@ Measured facts from the pipeline: {facts}
 Fail if ANY: YouTube intro / "Subscribe" / "Available in 4K" card; more than ~1s before the first spoken word;
 spoken language not English; captions missing, covering a face, or clearly out of sync with the speech;
 black frames; music not audible at some point; drop not on the punch word or dead air before the montage;
-an end card; watermark missing or on the black/blurred bars; total length outside 35-60 seconds.
+an end card; watermark missing or on the black/blurred bars; total length outside 35-60 seconds;
+ANY channel outro / end screen / "like & subscribe" graphic or promo speech ANYWHERE in the video (also mid-video),
+or captions showing words like SUBSCRIBE / CHANNEL / SUPPORT US.
 Return ONLY JSON:
 {{"pass": true, "issues": [], "trim_start": 0.0, "trim_end": 0.0, "retry_new_clip": false}}
 trim_start / trim_end = seconds to cut from the start / end only if a problem sits at an edge.

@@ -41,5 +41,5 @@ def pending() -> list[str]:
 def mark(url: str, status: str, reason: str = "") -> None:
     USED.parent.mkdir(parents=True, exist_ok=True)
     with USED.open("a") as f:
-        f.write(f"{time.strftime('%Y-%m-%d %H:%M')}\t{status}\t{url}\t{(reason or '').replace(chr(9), ' ')[:200]}\n")
+        f.write(f"{time.strftime('%Y-%m-%d %H:%M', time.gmtime(time.time() + 19800))} IST\t{status}\t{url}\t{(reason or '').replace(chr(9), ' ')[:200]}\n")
     print("LINK", status, url, reason[:120], flush=True)
