@@ -37,14 +37,14 @@ GENRES = {
         "Money Heist Professor speech scene English dub",
     ],
     "games": [
-        "Red Dead Redemption 2 Arthur Morgan cutscene",
-        "God of War Kratos and Atreus cutscene",
-        "The Last of Us Joel hospital cutscene",
-        "GTA 5 Trevor meets Michael cutscene",
-        "Cyberpunk 2077 Johnny Silverhand cutscene",
-        "League of Legends official cinematic",
-        "Ghost of Tsushima Jin Sakai cutscene",
-        "Marvel's Spider-Man 2 official cutscene",
+        "Red Dead Redemption 2 Arthur Morgan cutscene no subtitles 4K",
+        "God of War Kratos and Atreus cutscene no subtitles 4K",
+        "The Last of Us Joel hospital cutscene no subtitles 4K",
+        "GTA 5 Trevor meets Michael cutscene no subtitles 4K",
+        "Cyberpunk 2077 Johnny Silverhand cutscene no subtitles 4K",
+        "League of Legends cinematic with dialogue",
+        "Ghost of Tsushima Jin Sakai cutscene no subtitles 4K",
+        "Marvel's Spider-Man 2 official cutscene no subtitles 4K",
     ],
     "sports": [
         "Verstappen Abu Dhabi 2021 last lap team radio",
@@ -129,7 +129,7 @@ MIN_WORDS = 8          # fewer words = captionless video -> reject / shift (5 fo
 MAX_LEAD = 0.9         # max seconds before the first spoken word (intro trim)
 INTRO_SKIP = 15.0      # never dialogue_start < 15s on sources longer than 60s
 MAX_QC_RETRIES = 2
-MAX_CANDIDATES = 5
+MAX_CANDIDATES = 6
 END_CARD_S = 0.0      # end card removed (BiBi, Nov 22)
 DLG_MIN, DLG_MAX = 24.0, 48.0     # phase 1 (dialogue) seconds
 TOTAL_MIN, TOTAL_MAX = 35.0, 59.0
@@ -510,6 +510,9 @@ def build_draft(query, used_urls, demo, cand):
     return {"draft": draft, "props": props, "plan": meta, "info": info}
 
 
+TRIED_ORDER: list[str] = []
+
+
 def next_query(tried):
     env_q = os.environ.get("QUERY")
     if env_q and env_q not in tried:
@@ -520,8 +523,12 @@ def next_query(tried):
         if not tried:
             genre = list(GENRES)[int(os.environ.get("GITHUB_RUN_NUMBER") or random.randint(0, 99)) % len(GENRES)]
         else:
-            genre = genre_of(next(iter(tried)))
-    pool = [q for q in GENRES[genre] if q not in tried] or [q for q in NICHE_QUERIES if q not in tried] or NICHE_QUERIES
+            genre = genre_of(TRIED_ORDER[0]) if TRIED_ORDER else "movies"
+    pool = [q for q in GENRES.get(genre, []) if q not in tried]
+    if len(tried) >= 3 or not pool:
+        # 3 rejects in one genre (e.g. game uploads with burned-in subtitles) -> fall back to dialogue-rich genres
+        pool = [q for g in ("movies", "web_series", "cartoons") for q in GENRES[g] if q not in tried]
+    pool = pool or [q for q in NICHE_QUERIES if q not in tried] or NICHE_QUERIES
     return random.choice(pool)
 
 
@@ -530,6 +537,7 @@ def build_with_candidates(tried, used_urls, demo):
     for cand in range(1, MAX_CANDIDATES + 1):
         q = next_query(tried)
         tried.add(q)
+        TRIED_ORDER.append(q)
         try:
             return build_draft(q, used_urls, demo, cand)
         except CandidateRejected as e:
