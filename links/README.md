@@ -11,7 +11,7 @@
 - Wahi RapidAPI downloader → Gemini check (logo / subtitles / fan edit nahi hona chahiye) → captions, music, QC.
 - Link use hone ke baad `links/used.txt` me likh diya jata hai (`used` ya `rejected` + reason), aur bot (bibi-bot) usko main pe commit kar deta hai. Isliye same link dobara nahi chalega.
 - Agar clip reject hua (logo, subtitles, English nahi, etc.), to `rejected` + reason likh ke agla link try hota hai.
-- Jab queue me koi naya link nahi bacha, tab pipeline khud search karta hai (auto search).
+- Jab queue me koi naya link nahi bacha, tab `channels/channels.txt` ke channels se clips aate hain, aur unke baad pipeline khud search karta hai (auto search).
 
 **Ek hi link turant chalana ho:** Actions → riyio-v2 → Run workflow → `source_url` me link daalo. Ye queue se upar chalta hai (override).
 

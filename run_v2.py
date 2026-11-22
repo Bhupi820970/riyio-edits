@@ -12,7 +12,7 @@ from pipeline_lib.sourcing import search_candidates, download_url, download_bank
 from pipeline_lib.postprocess import upscale_hdr, buffer_post
 from pipeline_lib import style
 from pipeline_lib import captions as captions_mod
-from pipeline_lib import channel_blocklist, link_queue
+from pipeline_lib import channel_blocklist, link_queue, channel_source
 
 # Rotating famous-scene bank by GENRE: iconic ENGLISH dialogue (anime = English dub; sports/games may use
 # English commentary / team radio / cutscene dialogue). GENRE env forces a genre, QUERY env forces a query.
@@ -246,7 +246,7 @@ def pick_song(pool, mood, out):
 
 
 def genre_of(query):
-    if query.startswith("url:"):
+    if query.startswith(("url:", "channel:")):
         g = os.environ.get("GENRE", "").strip().lower()
         return g if g in GENRES else "movies"
     for g, qs in GENRES.items():
@@ -539,6 +539,7 @@ def build_draft(src, info, dur, w, h, query, demo, cand):
 GENRE_FALLBACK = ["movies", "web_series", "cartoons", "anime", "games", "sports"]
 MAX_DOWNLOADS = 12        # sources downloaded + screened per run before giving up
 PER_QUERY = 3             # results tried per search query
+MAX_QUERIES = 14          # search calls per run (RapidAPI quota)
 REJECTS: list[dict] = []
 
 
@@ -573,28 +574,28 @@ def query_plan(tried):
     return out
 
 
-def _attempt(url, hint, query, used_urls, demo, n, link=False):
+def _attempt(url, hint, query, used_urls, demo, n, link=False, track=None):
     try:
         src, info, dur, w, h = fetch_and_screen(url, hint, used_urls)
         ctx = build_draft(src, info, dur, w, h, query, demo, n)
         Path("rejects.json").write_text(json.dumps(REJECTS, indent=2))
-        if link:
-            link_queue.mark(url, "used", info.get("title", ""))
+        if link or track:
+            link_queue.mark(url, track or "used", info.get("title", ""))
         return ctx
     except CandidateRejected as e:
         ch = (hint or {}).get("channel") or ""
-        if isinstance(e, SourceRejected):
+        if isinstance(e, SourceRejected) and not track:  # trusted channels: learned after 2 rejects (below)
             channel_blocklist.learn(ch, str(e), (hint or {}).get("title", ""))
         REJECTS.append({"n": n, "query": query, "title": (hint or {}).get("title", "") or url, "channel": ch,
                         "reason": str(e)[:200]})
         print("CANDIDATE REJECTED:", e, flush=True)
-        if link:
+        if link or track:
             link_queue.mark(url, "rejected", str(e))
     except Exception as e:  # one bad source/tool step must not kill the whole run
         REJECTS.append({"n": n, "query": query, "title": (hint or {}).get("title", "") or url, "reason": "error: " + repr(e)[:180]})
         traceback.print_exc()
         print("CANDIDATE FAILED (trying next):", repr(e)[:300], flush=True)
-        if link:
+        if link or track:
             link_queue.mark(url, "rejected", "error: " + repr(e)[:150])
     return None
 
@@ -619,9 +620,27 @@ def build_with_candidates(tried, used_urls, demo):
         ctx = _attempt(url, {}, f"url:{url}", used_urls, demo, n, link=True)
         if ctx:
             return ctx
-    # 3) auto search across genres with ranked, pre-filtered results
+    # 3) trusted channels (channels/channels.txt): recent/popular scene clips, still pre-screened
+    skip_ids = link_queue.used_ids() | {link_queue._vid(u) for u in used_urls}
+    ch_rejects = {}
+    for v in channel_source.candidates(skip_ids):
+        if ch_rejects.get(v["channel"], 0) >= 2 or channel_blocklist.is_blocked(v["channel"]):
+            continue
+        n += 1
+        print(f"=== CHANNEL VIDEO {n}: {v['title'][:80]} | {v['channel']}", flush=True)
+        before = len(REJECTS)
+        ctx = _attempt(v["url"], v, f"channel:{v['channel']}", used_urls, demo, n, track="channel-used")
+        if ctx:
+            return ctx
+        if len(REJECTS) > before and channel_blocklist.LEARN.search(REJECTS[-1]["reason"]):
+            ch_rejects[v["channel"]] = ch_rejects.get(v["channel"], 0) + 1
+            if ch_rejects[v["channel"]] >= 2:
+                channel_blocklist.learn(v["channel"], REJECTS[-1]["reason"], v["title"])
+    # 4) auto search across genres with ranked, pre-filtered results
     downloads = 0
-    for q in query_plan(tried):
+    for qi, q in enumerate(query_plan(tried)):
+        if qi >= MAX_QUERIES:
+            break
         tried.add(q)
         print(f"=== QUERY [{genre_of(q)}]: {q}", flush=True)
         for it in search_candidates(search_terms(q), exclude=used_urls)[:PER_QUERY]:
