@@ -43,10 +43,16 @@ def _rapid_get(path: str, params: dict, timeout: int = 60) -> dict:
             _CUR = (_CUR + step) % n
             return data
         except urllib.error.HTTPError as e:
+            body = ""
+            try:
+                body = e.read().decode("utf-8", errors="ignore")[:300]
+            except Exception:
+                pass
+            print(f"HTTP {e.code} body: {body}")
             if e.code in (401, 403, 429):
                 _DEAD.add(slot)
                 continue
-            raise RapidAPIError(f"http {e.code}") from e
+            raise RapidAPIError(f"http {e.code} {body}") from e
     raise RapidAPIError("all keys exhausted")
 
 def is_blacklisted(title: str, channel: str) -> bool:
