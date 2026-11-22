@@ -453,11 +453,11 @@ def build_draft(query, used_urls, demo, cand):
     bed_start = audible_start(bed) if bed else 0.0
     if bed:
         run(["ffmpeg", "-y", "-ss", f"{bed_start:.3f}", "-t", f"{drop_s + 0.6:.3f}", "-i", str(bed),
-             "-af", "loudnorm=I=-16:TP=-1.5:LRA=11,afade=t=in:d=0.08", "-ar", "48000", "-ac", "2",
+             "-map", "0:a:0", "-vn", "-af", "loudnorm=I=-16:TP=-1.5:LRA=11,afade=t=in:d=0.08", "-ar", "48000", "-ac", "2",
              "-c:a", "aac", "-b:a", "256k", str(assets_dir / "bed.m4a")])
     if drop:
         run(["ffmpeg", "-y", "-ss", f"{song_drop:.3f}", "-t", f"{total / FPS - drop_s + 0.6:.3f}", "-i", str(drop),
-             "-af", "loudnorm=I=-10:TP=-1.0:LRA=7", "-ar", "48000", "-ac", "2",
+             "-map", "0:a:0", "-vn", "-af", "loudnorm=I=-10:TP=-1.0:LRA=7", "-ar", "48000", "-ac", "2",
              "-c:a", "aac", "-b:a", "256k", str(assets_dir / "drop.m4a")])
     make_sfx(assets_dir)
     wm_size = captions_mod.watermark_size("RIYIO", style.W, 0.07)
@@ -543,6 +543,10 @@ def build_with_candidates(tried, used_urls, demo):
         except CandidateRejected as e:
             last = e
             print("CANDIDATE REJECTED:", e, flush=True)
+        except Exception as e:  # one bad source/tool step must not kill the whole run
+            last = e
+            traceback.print_exc()
+            print("CANDIDATE FAILED (trying next):", repr(e)[:300], flush=True)
     raise RuntimeError(f"no usable candidate after {MAX_CANDIDATES} tries: {last}")
 
 
