@@ -116,10 +116,23 @@ def probe_video(path):
         return 0, 0
 
 
+LETTERBOX = {"crop": ""}
+
+
+def detect_letterbox(src, dur, w, h):
+    """Find baked-in black bars (e.g. 2.39:1 inside 16:9) so the picture fills the 4:5 width."""
+    r = subprocess.run(["ffmpeg", "-hide_banner", "-ss", f"{min(30.0, dur / 3):.1f}", "-t", "20", "-i", str(src),
+                        "-vf", "fps=2,cropdetect=limit=24:round=2:reset=0", "-an", "-f", "null", "-"],
+                       capture_output=True, text=True)
+    crop = style.parse_cropdetect(r.stderr, w, h)
+    print("LETTERBOX crop:", crop or "none", flush=True)
+    return crop
+
+
 def prep_cut(src, dest, start, duration, audio=True, rgb=False, preset="fast"):
     """Graded, sharpened, no-crop 4:5 cut (blurred fill top/bottom). Dialogue audio loudness-normalised."""
     cmd = ["ffmpeg", "-y", "-ss", f"{start:.3f}", "-t", f"{duration:.3f}", "-i", str(src),
-           "-filter_complex", style.frame_filter(rgb), "-map", "[v]",
+           "-filter_complex", style.frame_filter(rgb, LETTERBOX["crop"]), "-map", "[v]",
            "-c:v", "libx264", "-preset", preset, "-crf", "14", "-pix_fmt", "yuv420p", "-movflags", "+faststart"]
     if audio:
         cmd += ["-map", "0:a:0?", "-af", "loudnorm=I=-16:TP=-1.5:LRA=11", "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2"]
@@ -207,6 +220,7 @@ def build_draft(query, used_urls, demo, cand):
         raise CandidateRejected(f"source too low-res {w}x{h}")
     if dur < DLG_MIN + 15:
         raise CandidateRejected(f"source too short ({dur:.0f}s)")
+    LETTERBOX["crop"] = detect_letterbox(src, dur, w, h)
 
     prev = Path("preview360.mp4")
     run(["ffmpeg", "-y", "-i", str(src), "-vf", "scale=-2:360", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28", "-c:a", "aac", "-b:a", "64k", str(prev)])

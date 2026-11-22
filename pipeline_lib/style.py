@@ -19,10 +19,12 @@ GRADE = ("eq=contrast=1.25:saturation=0.62:brightness=-0.035:gamma=0.95,"
          "unsharp=5:5:1.0:5:5:0.0,noise=alls=4:allf=t")
 
 
-def frame_filter(rgb_split: bool = False) -> str:
-    fc = (f"[0:v]split=2[a][b];"
+def frame_filter(rgb_split: bool = False, crop: str = "") -> str:
+    """crop = 'w:h:x:y' of the real picture inside baked-in letterbox bars (from detect_letterbox)."""
+    pre = f"crop={crop}," if crop else ""
+    fc = (f"[0:v]{pre}split=2[a][b];"
           f"[a]scale=270:338:force_original_aspect_ratio=increase,crop=270:338,boxblur=12:2,"
-          f"eq=brightness=-0.22:saturation=0.7,scale={W}:{H}[bg];"
+          f"eq=brightness=-0.12:saturation=0.75,scale={W}:{H}[bg];"
           f"[b]scale={W}:{H}:force_original_aspect_ratio=decrease:flags=lanczos[fg];"
           f"[bg][fg]overlay=(W-w)/2:(H-h)/2,{GRADE}")
     if rgb_split:
@@ -124,3 +126,15 @@ def montage_cuts(beats_comp: list[float], start: float, length: float) -> list[f
 def good_hook(h: str) -> bool:
     h = (h or "").strip().strip('"').strip()
     return bool(h) and h.lower().rstrip(".!?") not in BANNED_HOOKS and len(h.split()) <= 6
+
+
+def parse_cropdetect(stderr: str, src_w: int, src_h: int) -> str:
+    """Most common cropdetect result; only used when it removes black letterbox bars (>4% of height)."""
+    from collections import Counter
+    found = re.findall(r"crop=(\d+):(\d+):(\d+):(\d+)", stderr or "")
+    if not found:
+        return ""
+    w, h, x, y = (int(v) for v in Counter(found).most_common(1)[0][0])
+    if w < src_w * 0.9 or h < src_h * 0.5 or h > src_h * 0.96:
+        return ""  # not a clean letterbox -> keep the full frame (never crop the picture)
+    return f"{w}:{h}:{x}:{y}"
