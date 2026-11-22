@@ -71,7 +71,10 @@ def rapid_search(query: str) -> list[dict]:
     return out
 
 def rapid_download(url: str, out: Path, fmt: str = "mp4") -> dict:
-    job = _rapid_get("/ajax/download.php", {"url": url, "format": fmt})
+    params = {"url": url, "format": fmt, "max_duration": "12"}
+    if fmt == "mp3":
+        params["audio_quality"] = "192"
+    job = _rapid_get("/ajax/download.php", params)
     if not job.get("success"):
         raise RapidAPIError(f"start failed: {job}")
     progress = job.get("progress_url")
