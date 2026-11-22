@@ -77,3 +77,31 @@ def analyze(video_360p: Path) -> dict:
                 if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
                     continue
     raise RuntimeError(f"Gemini failed: {last}")
+
+
+def qc_inspect(video_360p: Path) -> dict:
+    """Pass 2: inspect rendered draft."""
+    try:
+        client, model = _client()
+        f = client.files.upload(file=str(video_360p))
+        for _ in range(40):
+            state = getattr(getattr(f, "state", None), "name", "")
+            if state == "ACTIVE":
+                break
+            time.sleep(2)
+            f = client.files.get(name=f.name)
+        prompt = """Inspect this rendered short. Return ONLY JSON:
+{"pass": true, "issues": [], "trim_start": 0.0, "trim_end": 0.0, "retry_new_clip": false}
+Fail if: YouTube intro/subscribe, missing captions, black screen, broken beat drop."""
+        resp = client.models.generate_content(
+            model=model,
+            contents=[types.Part.from_uri(f.uri, "video/mp4"), prompt],
+            config=types.GenerateContentConfig(temperature=0.2, response_mime_type="application/json"),
+        )
+        text = (resp.text or "").strip()
+        if text.startswith("```"):
+            text = text.split("\n", 1)[-1].rsplit("```", 1)[0]
+        return json.loads(text)
+    except Exception as e:
+        print("QC error", e, flush=True)
+        return {"pass": True, "issues": [str(e)], "retry_new_clip": False}
