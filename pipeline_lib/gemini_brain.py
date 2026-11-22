@@ -80,41 +80,78 @@ def _upload(client, path: Path):
     raise RuntimeError("Gemini file never became ACTIVE")
 
 
-def _ask(video: Path, prompt: str, models: list[str], tag: str) -> tuple[dict, str]:
-    """Upload once per key, try each model (one retry on 503), parse JSON."""
+BUSY = ("503", "UNAVAILABLE", "429", "RESOURCE_EXHAUSTED", "overloaded", "high demand")
+
+
+def _generate(make_contents, prompt: str, models: list[str], tag: str) -> tuple[dict, str]:
+    """Try every key x model. Busy / quota errors (503 / 429) move to the next model at once;
+    only after a whole round fails do we back off (10s, then 25s) and go round again."""
     last = None
-    for key in KEYS:
-        try:
+    for rnd, wait in enumerate((0, 10, 25)):
+        if wait:
+            print(f"{tag}: all models busy, backing off {wait}s", flush=True)
+            time.sleep(wait)
+        for key in KEYS:
             client = genai.Client(api_key=key)
-            f = _upload(client, video)
-        except Exception as e:
-            last = e
-            print(f"{tag} upload error", repr(e)[:200], flush=True)
-            continue
-        try:
-            for model in models:
-                for attempt in range(2):
+            try:
+                contents, cleanup = make_contents(client)
+            except Exception as e:
+                last = e
+                print(f"{tag} prepare error", repr(e)[:200], flush=True)
+                continue
+            try:
+                for model in models:
                     try:
                         resp = client.models.generate_content(
-                            model=model, contents=[f, prompt],
+                            model=model, contents=contents + [prompt],
                             config=types.GenerateContentConfig(temperature=0.3, response_mime_type="application/json"),
                         )
                         print(f"{tag} RAW ({model}):", (resp.text or "")[:700], flush=True)
                         return _parse_json(resp.text), model
                     except Exception as e:
                         last = e
-                        msg = str(e)
-                        print(f"{tag} {model} error", repr(e)[:160], flush=True)
-                        if ("503" in msg or "UNAVAILABLE" in msg) and attempt == 0:
-                            time.sleep(8)
-                            continue
-                        break
-        finally:
+                        busy = any(b in str(e) for b in BUSY)
+                        print(f"{tag} {model} {'busy' if busy else 'error'}:", repr(e)[:140], flush=True)
+                        continue
+            finally:
+                cleanup()
+    raise RuntimeError(f"{tag} failed: {str(last)[:300]}")
+
+
+def _ask(video: Path, prompt: str, models: list[str], tag: str) -> tuple[dict, str]:
+    def make(client):
+        f = _upload(client, video)
+
+        def cleanup():
             try:
                 client.files.delete(name=f.name)
             except Exception:
                 pass
-    raise RuntimeError(f"{tag} failed: {str(last)[:300]}")
+        return [f], cleanup
+    return _generate(make, prompt, models, tag)
+
+
+PRESCREEN_PROMPT = """These are {n} still frames sampled across one YouTube upload. Check ONLY for overlays.
+Return ONLY JSON: {{"clean": true, "logo": false, "subtitles": false, "fan_edit": false, "reason": ""}}
+- logo = ANY channel/network/studio logo, bug or watermark anywhere (even small, in a corner).
+- subtitles = burned-in subtitle / caption text.
+- fan_edit = split screens, side-by-side comparisons, multi-feed compilations, reaction cams, text overlays.
+clean = true only if all three are false."""
+
+
+def prescreen(frames: list[Path]) -> dict:
+    """Cheap pre-check on a few JPEG frames (no video upload) before the full director pass."""
+    if not available():
+        return {"clean": True, "reason": "gemini unavailable"}
+
+    def make(client):
+        parts = [types.Part.from_bytes(data=Path(fp).read_bytes(), mime_type="image/jpeg") for fp in frames]
+        return parts, (lambda: None)
+    order = ["gemini-3.5-flash-lite", "gemini-3.8-flash-lite", "gemini-3.5-flash", "gemini-3.8-flash", "gemini-2.0-flash"]
+    data, model = _generate(make, PRESCREEN_PROMPT.format(n=len(frames)), order, "PRESCREEN")
+    flags = [k for k in ("logo", "subtitles", "fan_edit") if data.get(k)]
+    clean = bool(data.get("clean", not flags)) and not flags
+    return {"clean": clean, "flags": flags, "reason": data.get("reason") or ", ".join(flags), "model": model}
 
 
 def analyze(video_360p: Path, genre: str = "movies") -> dict:

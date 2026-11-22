@@ -106,6 +106,19 @@ def rapid_download(url: str, out: Path, fmt: str = "1080") -> dict:
         raise RapidAPIError("file fetch failed")
     return {"title": job.get("title") or "", "id": job.get("id") or "", "path": str(out)}
 
+# channels known to upload without burned-in overlays (studio / publisher / league channels)
+CLEAN_CHANNELS = ("formula 1", "rockstar games", "playstation", "santa monica studio", "naughty dog",
+                  "cd projekt red", "cyberpunk 2077", "league of legends", "riot games", "insomniac games",
+                  "sucker punch productions", "dreamworks", "dreamworks animation", "pixar", "walt disney animation",
+                  "sony pictures animation", "universal pictures", "paramount pictures", "lionsgate movies",
+                  "a24", "focus features", "searchlight pictures", "20th century studios", "amazon mgm studios",
+                  "toho animation", "aniplex usa", "funimation", "uefa", "premier league", "man city", "fc barcelona",
+                  "liverpool fc", "real madrid")
+# hard skips: compilations, fan splices, multi-language comparisons, reactions
+SKIP_TITLE = ("compilation", "all angles", "all commentary", "languages", "multi-language", "multilanguage",
+              "vs live action", "live action vs", "comparison", "reaction", "reacts", "fan edit", "fanmade",
+              "fan made", "mashup", "amv", "edit audio", "explained", "review", "#shorts", "tiktok",
+              "every version", "versions", "in 10 languages", "dubbed in")
 OFFICIAL_HINTS = ("official", "movieclips", "clips", "studios", "pictures", "films", "entertainment",
                   "tv", "channel", "originals", "fandango", "amc", "bbc", "fx", "a24", "lionsgate",
                   "paramount", "universal", "20th century", "focus features", "toho", "aniplex")
@@ -118,6 +131,8 @@ def _rank(it: dict, query: str) -> int:
     """Prefer official channel uploads of the actual scene; push fan edits/reactions down."""
     t, ch = it["title"].lower(), (it["channel"] or "").lower()
     score = 0
+    if any(ch == c or ch.startswith(c) for c in CLEAN_CHANNELS):
+        score += 6
     if any(h in ch for h in OFFICIAL_HINTS):
         score += 3
     if "scene" in t or "clip" in t:
@@ -141,6 +156,51 @@ def download_bank_song(fname: str, out: Path) -> Path | None:
         print("SONG from songs-bank", fname, out.stat().st_size, flush=True)
         return out
     out.unlink(missing_ok=True)
+    return None
+
+
+def skip_reason(it: dict) -> str:
+    from pipeline_lib import channel_blocklist
+    t = (it.get("title") or "").lower()
+    if is_blacklisted(it.get("title") or "", it.get("channel") or ""):
+        return "blacklisted brand"
+    if channel_blocklist.is_blocked(it.get("channel") or ""):
+        return "learned blocklist (logo/subs/fan edit before)"
+    for k in SKIP_TITLE:
+        if k in t:
+            return f"title has '{k}'"
+    return ""
+
+
+def search_candidates(query: str, exclude: set | None = None) -> list[dict]:
+    """Ranked, pre-filtered search results (no download)."""
+    print("RapidAPI search:", query[:70], flush=True)
+    try:
+        results = rapid_search(query)
+    except Exception as e:
+        print("search fail", e)
+        return []
+    out = []
+    for it in sorted(results[:15], key=lambda it: -_rank(it, query)):
+        why = "used before" if exclude and it["url"] in exclude else skip_reason(it)
+        if why:
+            print("  skip:", it["title"][:50], "|", it["channel"], "->", why)
+            continue
+        out.append(it)
+    print("  usable results:", len(out), flush=True)
+    return out
+
+
+def download_url(url: str, out: Path) -> dict | None:
+    """Same RapidAPI downloader, best format first (1080 -> 720 -> fallbacks)."""
+    for fmt in ("1080", "720", "mp4", "best"):
+        try:
+            info = rapid_download(url, out, fmt=fmt)
+            info["url"] = url
+            print("DOWNLOADED", fmt, out.stat().st_size, flush=True)
+            return info
+        except Exception as e:
+            print(f"dl fail {fmt}", e)
     return None
 
 

@@ -6,12 +6,13 @@ import traceback
 import json, os, subprocess, shutil, random, math
 from pathlib import Path
 
-from pipeline_lib.gemini_brain import analyze, qc_inspect, available as gemini_ok
+from pipeline_lib.gemini_brain import analyze, qc_inspect, prescreen, available as gemini_ok
 from pipeline_lib.audio_sync import detect_beats, whisper_words, detect_language, audible_start
-from pipeline_lib.sourcing import search_and_download, download_bank_song
+from pipeline_lib.sourcing import search_candidates, download_url, download_bank_song
 from pipeline_lib.postprocess import upscale_hdr, buffer_post
 from pipeline_lib import style
 from pipeline_lib import captions as captions_mod
+from pipeline_lib import channel_blocklist, link_queue
 
 # Rotating famous-scene bank by GENRE: iconic ENGLISH dialogue (anime = English dub; sports/games may use
 # English commentary / team radio / cutscene dialogue). GENRE env forces a genre, QUERY env forces a query.
@@ -129,7 +130,6 @@ MIN_WORDS = 8          # fewer words = captionless video -> reject / shift (5 fo
 MAX_LEAD = 0.9         # max seconds before the first spoken word (intro trim)
 INTRO_SKIP = 15.0      # never dialogue_start < 15s on sources longer than 60s
 MAX_QC_RETRIES = 2
-MAX_CANDIDATES = 6
 END_CARD_S = 0.0      # end card removed (BiBi, Nov 22)
 DLG_MIN, DLG_MAX = 24.0, 48.0     # phase 1 (dialogue) seconds
 TOTAL_MIN, TOTAL_MAX = 35.0, 59.0
@@ -246,24 +246,30 @@ def pick_song(pool, mood, out):
 
 
 def genre_of(query):
+    if query.startswith("url:"):
+        g = os.environ.get("GENRE", "").strip().lower()
+        return g if g in GENRES else "movies"
     for g, qs in GENRES.items():
         if query in qs:
             return g
     return os.environ.get("GENRE", "movies")
 
 
-def build_draft(query, used_urls, demo, cand):
-    """One full candidate: download -> Pass 1 -> words -> cuts -> render draft. Returns ctx dict."""
-    genre = genre_of(query)
-    min_words = 5 if genre in DIALOGUE_LIGHT else MIN_WORDS
-    print(f"=== CANDIDATE {cand} [{genre}]: {query}", flush=True)
+class SourceRejected(CandidateRejected):
+    """Rejected because of the upload itself (logo / subtitles / fan edit) -> learn the channel."""
+
+
+def fetch_and_screen(url, info_hint, used_urls):
+    """Download with the RapidAPI downloader, basic checks, then the cheap 5-frame Gemini pre-screen."""
     Path("clips").mkdir(exist_ok=True)
     src = Path("clips/source.mp4")
     src.unlink(missing_ok=True)
-    info = search_and_download(query, src, exclude=used_urls)
+    used_urls.add(url)
+    info = download_url(url, src)
     if not info:
         raise CandidateRejected("no download (RapidAPI)")
-    used_urls.add(info.get("url", ""))
+    info = {**info, **{k: v for k, v in (info_hint or {}).items() if v}}
+    info.setdefault("channel", "")
     dur = probe_duration(src)
     w, h = probe_video(src)
     print("DOWNLOADED", info.get("title"), "|", info.get("channel"), f"{w}x{h}", f"{dur:.1f}s", flush=True)
@@ -271,6 +277,25 @@ def build_draft(query, used_urls, demo, cand):
         raise CandidateRejected(f"source too low-res {w}x{h}")
     if dur < DLG_MIN + 15:
         raise CandidateRejected(f"source too short ({dur:.0f}s)")
+    frames = []
+    for k, frac in enumerate((0.12, 0.3, 0.5, 0.7, 0.88)):
+        fp = Path(f"clips/screen_{k}.jpg")
+        run(["ffmpeg", "-y", "-ss", f"{dur * frac:.2f}", "-i", str(src), "-frames:v", "1", "-vf", "scale=768:-2", "-q:v", "4", str(fp)])
+        if fp.exists():
+            frames.append(fp)
+    if gemini_ok() and frames:
+        ps = prescreen(frames)
+        print("PRESCREEN", json.dumps(ps), flush=True)
+        if not ps.get("clean"):
+            raise SourceRejected("pre-screen: " + str(ps.get("reason") or ps.get("flags")))
+    return src, info, dur, w, h
+
+
+def build_draft(src, info, dur, w, h, query, demo, cand):
+    """One screened source: Pass 1 -> words -> cuts -> render draft. Returns ctx dict."""
+    genre = genre_of(query)
+    min_words = 5 if genre in DIALOGUE_LIGHT else MIN_WORDS
+    print(f"=== BUILD candidate {cand} [{genre}]: {info.get('title')} | {info.get('channel')}", flush=True)
     LETTERBOX["crop"] = detect_letterbox(src, dur, w, h)
 
     prev = Path("preview360.mp4")
@@ -279,7 +304,8 @@ def build_draft(query, used_urls, demo, cand):
     print("[2] Gemini Pass 1 (director)", flush=True)
     plan = analyze(prev, genre) if gemini_ok() else {"dialogue_start": 15, "dialogue_end": 50, "action_cuts": [], "mood": "dark_hype"}
     if plan.get("reject"):
-        raise CandidateRejected("Gemini Pass 1 rejected: " + str(plan.get("reject_reason") or "unspecified"))
+        why = "Gemini Pass 1 rejected: " + str(plan.get("reject_reason") or "unspecified")
+        raise (SourceRejected if channel_blocklist.LEARN.search(why) else CandidateRejected)(why)
     if str(plan.get("language") or "en").lower()[:2] != "en":
         raise CandidateRejected(f"Gemini says language={plan.get('language')}")
     lo = min_start(dur)
@@ -510,44 +536,106 @@ def build_draft(query, used_urls, demo, cand):
     return {"draft": draft, "props": props, "plan": meta, "info": info}
 
 
-TRIED_ORDER: list[str] = []
+GENRE_FALLBACK = ["movies", "web_series", "cartoons", "anime", "games", "sports"]
+MAX_DOWNLOADS = 12        # sources downloaded + screened per run before giving up
+PER_QUERY = 3             # results tried per search query
+REJECTS: list[dict] = []
 
 
-def next_query(tried):
+def genre_order():
+    forced = os.environ.get("GENRE", "").strip().lower()
+    start = forced if forced in GENRES else \
+        list(GENRES)[int(os.environ.get("GITHUB_RUN_NUMBER") or random.randint(0, 99)) % len(GENRES)]
+    return [start] + [g for g in GENRE_FALLBACK if g != start]
+
+
+def search_terms(q):
+    """Steer search toward clean uploads (no burned-in subs / logos)."""
+    g = genre_of(q)
+    if g == "sports":
+        return q + " official"
+    if g == "games" or "no subtitles" in q:
+        return q
+    if g == "anime":
+        return q + " no subtitles"
+    return q + (" 4K clean no subtitles" if "scene" in q else " scene 4K clean no subtitles")
+
+
+def query_plan(tried):
+    """Queries alternating across genres (never more than one query in a row per genre)."""
     env_q = os.environ.get("QUERY")
-    if env_q and env_q not in tried:
-        return env_q
-    genre = os.environ.get("GENRE", "").strip().lower()
-    if genre not in GENRES:
-        # rotate genres across runs; stay in the same genre for this run's retries
-        if not tried:
-            genre = list(GENRES)[int(os.environ.get("GITHUB_RUN_NUMBER") or random.randint(0, 99)) % len(GENRES)]
-        else:
-            genre = genre_of(TRIED_ORDER[0]) if TRIED_ORDER else "movies"
-    pool = [q for q in GENRES.get(genre, []) if q not in tried]
-    if len(tried) >= 3 or not pool:
-        # 3 rejects in one genre (e.g. game uploads with burned-in subtitles) -> fall back to dialogue-rich genres
-        pool = [q for g in ("movies", "web_series", "cartoons") for q in GENRES[g] if q not in tried]
-    pool = pool or [q for q in NICHE_QUERIES if q not in tried] or NICHE_QUERIES
-    return random.choice(pool)
+    out = [env_q] if env_q and env_q not in tried else []
+    pools = {g: [q for q in random.sample(GENRES[g], len(GENRES[g])) if q not in tried] for g in genre_order()}
+    while any(pools.values()):
+        for g in genre_order():
+            if pools[g]:
+                out.append(pools[g].pop(0))
+    return out
+
+
+def _attempt(url, hint, query, used_urls, demo, n, link=False):
+    try:
+        src, info, dur, w, h = fetch_and_screen(url, hint, used_urls)
+        ctx = build_draft(src, info, dur, w, h, query, demo, n)
+        Path("rejects.json").write_text(json.dumps(REJECTS, indent=2))
+        if link:
+            link_queue.mark(url, "used", info.get("title", ""))
+        return ctx
+    except CandidateRejected as e:
+        ch = (hint or {}).get("channel") or ""
+        if isinstance(e, SourceRejected):
+            channel_blocklist.learn(ch, str(e), (hint or {}).get("title", ""))
+        REJECTS.append({"n": n, "query": query, "title": (hint or {}).get("title", "") or url, "channel": ch,
+                        "reason": str(e)[:200]})
+        print("CANDIDATE REJECTED:", e, flush=True)
+        if link:
+            link_queue.mark(url, "rejected", str(e))
+    except Exception as e:  # one bad source/tool step must not kill the whole run
+        REJECTS.append({"n": n, "query": query, "title": (hint or {}).get("title", "") or url, "reason": "error: " + repr(e)[:180]})
+        traceback.print_exc()
+        print("CANDIDATE FAILED (trying next):", repr(e)[:300], flush=True)
+        if link:
+            link_queue.mark(url, "rejected", "error: " + repr(e)[:150])
+    return None
 
 
 def build_with_candidates(tried, used_urls, demo):
-    last = None
-    for cand in range(1, MAX_CANDIDATES + 1):
-        q = next_query(tried)
+    # 1) workflow_dispatch source_url overrides everything (no fallback)
+    src_url = os.environ.get("SOURCE_URL", "").strip()
+    if src_url and src_url in used_urls:
+        raise RuntimeError("source_url clip did not pass QC; send another link")
+    if src_url:
+        ctx = _attempt(src_url, {}, f"url:{src_url}", used_urls, demo, 1)
+        if ctx:
+            return ctx
+        raise RuntimeError(f"source_url rejected: {REJECTS[-1]['reason'] if REJECTS else 'unknown'}")
+    n = 0
+    # 2) links/queue.txt first (each link once; used / rejected logged in links/used.txt)
+    for url in link_queue.pending():
+        if url in used_urls:
+            continue
+        n += 1
+        print(f"=== LINK {n}: {url}", flush=True)
+        ctx = _attempt(url, {}, f"url:{url}", used_urls, demo, n, link=True)
+        if ctx:
+            return ctx
+    # 3) auto search across genres with ranked, pre-filtered results
+    downloads = 0
+    for q in query_plan(tried):
         tried.add(q)
-        TRIED_ORDER.append(q)
-        try:
-            return build_draft(q, used_urls, demo, cand)
-        except CandidateRejected as e:
-            last = e
-            print("CANDIDATE REJECTED:", e, flush=True)
-        except Exception as e:  # one bad source/tool step must not kill the whole run
-            last = e
-            traceback.print_exc()
-            print("CANDIDATE FAILED (trying next):", repr(e)[:300], flush=True)
-    raise RuntimeError(f"no usable candidate after {MAX_CANDIDATES} tries: {last}")
+        print(f"=== QUERY [{genre_of(q)}]: {q}", flush=True)
+        for it in search_candidates(search_terms(q), exclude=used_urls)[:PER_QUERY]:
+            if downloads >= MAX_DOWNLOADS:
+                break
+            downloads += 1
+            n += 1
+            ctx = _attempt(it["url"], it, q, used_urls, demo, n)
+            if ctx:
+                return ctx
+        if downloads >= MAX_DOWNLOADS:
+            break
+    Path("rejects.json").write_text(json.dumps(REJECTS, indent=2))
+    raise RuntimeError(f"no usable candidate after {downloads} downloads; rejects in rejects.json")
 
 
 def trim_video(src, dest, trim_start, trim_end):

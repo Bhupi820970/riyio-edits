@@ -1,0 +1,74 @@
+{
+  "channels": {
+    "bbc": {
+      "channel": "BBC",
+      "reason": "Channel watermark visible in top-left corner (BBC logo)",
+      "example": "",
+      "last": "2026-11-22",
+      "count": 1
+    },
+    "filmzone tv": {
+      "channel": "FilmZone Tv",
+      "reason": "Fan edit / compilation splicing animated film with live-action",
+      "example": "",
+      "last": "2026-11-22",
+      "count": 1
+    },
+    "gameclips": {
+      "channel": "GameClips",
+      "reason": "Channel watermark 'GameClips' and burned-in subtitles",
+      "example": "",
+      "last": "2026-11-22",
+      "count": 1
+    },
+    "madd gamer": {
+      "channel": "Madd Gamer",
+      "reason": "Burned-in subtitles visible throughout",
+      "example": "",
+      "last": "2026-11-22",
+      "count": 1
+    },
+    "movieclips": {
+      "channel": "Movieclips",
+      "reason": "Channel logo/watermark visible (RT Movieclips)",
+      "example": "",
+      "last": "2026-11-22",
+      "count": 1
+    },
+    "otaku gaming": {
+      "channel": "Otaku Gaming",
+      "reason": "Channel watermark overlay in the bottom right corner",
+      "example": "",
+      "last": "2026-11-22",
+      "count": 1
+    },
+    "paul spacey": {
+      "channel": "Paul Spacey",
+      "reason": "Fan edit/compilation of multiple commentary feeds",
+      "example": "",
+      "last": "2026-11-22",
+      "count": 1
+    },
+    "rotten tomatoes tv": {
+      "channel": "Rotten Tomatoes TV",
+      "reason": "Hardcoded platform watermark ('Rotten Tomatoes TV')",
+      "example": "",
+      "last": "2026-11-22",
+      "count": 1
+    },
+    "solo adventures gaming": {
+      "channel": "Solo  Adventures Gaming",
+      "reason": "Burned-in subtitles and channel watermark",
+      "example": "",
+      "last": "2026-11-22",
+      "count": 1
+    },
+    "trailer trash": {
+      "channel": "TRAILER TRASH",
+      "reason": "Visible OTT logo, hardcoded subtitles",
+      "example": "",
+      "last": "2026-11-22",
+      "count": 1
+    }
+  }
+}
