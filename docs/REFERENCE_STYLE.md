@@ -65,3 +65,22 @@ riyio (one source clip) uses the same shape with ONE middle dialogue:
 - Unchanged: no logos (source_url -> links/queue.txt -> channels/channels.txt -> search), RIYIO watermark,
   English, 2-pass Gemini QC, outro cut, no end card.
 - Auto-post is OFF: schedule commented out in riyio-v2.yml and publishing needs repo variable RIYIO_AUTO_PUBLISH=1.
+
+## Update (Nov 23 2026, BiBi after demo 6): variety, no repeats, multi-source, caption size
+- Demo 6 problems: the whole edit came from one dinner-table clip, Gemini returned lazy picks (0,1,2,...80 s) so
+  the montage was the same talking heads again and again; captions were 150-170 px (too big).
+- Montage like ref1/ref2 (ref2 montage = 14 cuts in 23 s of DIFFERENT characters, scenes, wide + close + action):
+  `pipeline_lib/montage_select.py` builds an inventory of camera shots (4 fps grey pass, shot cuts, <=2.5 s chunks,
+  dHash per chunk). Every chunk is used once, picks in one source never overlap and keep >= 1 s apart, near-identical
+  looks (dHash <= 10) are never used twice, the dialogue window is blocked, no two cuts in a row from one camera shot.
+  Order with intent: intro = calmer build-up in story order, post-drop = strongest shots with rising energy, best last.
+- Gemini director returns `montage_shots` (t, energy, kind, reason) = varied best moments that match the dialogue's
+  vibe, plus `montage_sufficient`, `title`, `characters`, `related_queries`. Evenly spaced (lazy) picks are ignored.
+- Multi-source: only if the main clip lacks enough unique / strong shots (or the director says so), download 1-2
+  more clips of the SAME title (same trusted channel first, then search: official trailer / best scenes). Each extra
+  gets RapidAPI 1080 download, resolution check, logo pre-screen, letterbox detection, Gemini same-story + shot pass;
+  all sources are cut through the same 4:5 filter (1080 wide, grade, FPS) so they match.
+- QC fails a repetitive / single-clip / unrelated montage and captions that are too big or too small.
+- Captions: sized to the frame width like the refs (keys 52-96 px, fillers 34-60, punch up to 112), bigger for 1-2
+  words, shrunk to the free space beside the speaker.
+- Slow songs (beats > 0.75 s apart, librosa half-time) are subdivided so cuts land on 0.4-1.0 s.

@@ -71,8 +71,8 @@ jobs:
               echo "demo_only=false" >> "$GITHUB_OUTPUT"
             fi
           fi
-      - name: Timeline planner tests
-        run: python tests/test_timeline.py
+      - name: Unit tests (timeline, montage, captions)
+        run: python tests/test_timeline.py && python tests/test_montage.py && python tests/test_captions.py
       - name: Run pipeline
         env:
           DEMO_ONLY: ${{ steps.mode.outputs.demo_only }}

@@ -27,7 +27,12 @@ Watch this source clip (360p preview, timestamps in seconds) and return ONLY val
   "dialogue_end": <seconds>,
   "punch_word": "<one word>",
   "punch_time": <seconds>,
-  "action_cuts": [<30-45 timestamps in seconds>],
+  "title": "<movie / show / game name only, e.g. Meet the Parents>",
+  "characters": ["<main characters in the dialogue>"],
+  "montage_shots": [{"t": <seconds>, "energy": <1-10>, "kind": "<action|reaction|wide|close|hero|reveal>",
+                     "reason": "<why this shot fits the dialogue / hook / mood>"}],
+  "montage_sufficient": <bool>,
+  "related_queries": ["<YouTube search for more footage of the SAME title/characters>", "<another>"],
   "mood": "<dark_hype|epic_cinematic|emotional_romance|cold_sigma>",
   "hook_title": "<original 2-4 word title>",
   "hook_question": "<original 3-6 word question ending with ..?>",
@@ -47,9 +52,15 @@ Rules:
   (skip YouTube intros / "Subscribe" / "Available in 4K" cards).
 - punch_word = the last impactful word of the final line (a name, threat or reveal); punch_time = the exact
   second that word is spoken. The music drop will hit on it.
-- action_cuts: 30-45 timestamps OUTSIDE the dialogue window showing the most intense visuals of the same
-  show / characters (fights, explosions, chases, reveals, hero close-ups), best ones FIRST (the first ~10 open
-  the video); varied shots, no talking-head shots, no logos, no text on screen.
+- montage_shots: 25-40 DIFFERENT camera shots OUTSIDE the dialogue window, like a pro fan edit: many VARIED
+  best moments of the same title / characters (action, reactions, wide establishing shots, close-ups, hero moments,
+  reveals) whose vibe matches the dialogue's mood, so intro (build-up) -> line -> post-drop payoff feels like one
+  story with rising energy. Each entry is a DIFFERENT shot (a new camera angle or moment, never consecutive seconds
+  of the same shot, never the same framing twice). energy = how strong the moment is. reason = one short line.
+  Avoid static talking heads, title cards, text, logos and black frames. NEVER return evenly spaced timestamps.
+- montage_sufficient = false if this clip alone does not have ~25 different strong shots (e.g. a long dinner-table
+  or office conversation with few angles); the pipeline then downloads 1-2 more clips of the same title
+  (related_queries: official trailer, other famous scenes of the same characters).
 - hook_title: an ORIGINAL 2-4 word title-style quote about THIS exact scene's theme. hook_question: an ORIGINAL
   question that makes people watch. Never reuse wording from these instructions; no cliches such as
   "Built different", "Full throttle", "She read him cold".
@@ -175,13 +186,18 @@ QC_PROMPT = """You are a strict QC inspector for a RIYIO 4:5 cinematic short (Vi
    speech. The same song keeps playing under it, ducked (quieter) but audible the whole time.
 3) The beat drops exactly on the character's last punch word (white flash), the dialogue stops and the video
    cuts straight into a fast beat-synced montage (0.4-1.0s hard cuts) of the same show, music at full level,
-   no dialogue, no captions, until the end. There is NO end card. A small white "RIYIO" watermark sits inside the
+   no dialogue, no captions, until the end. Both montages must look like a pro fan edit: many VARIED shots
+   (action, reactions, wide, close-ups, hero moments) of the same title / characters with a vibe that matches the
+   dialogue, rising energy after the drop, and NO shot shown twice. There is NO end card. A small white "RIYIO" watermark sits inside the
    movie picture, bottom-center.
 Measured facts from the pipeline: {facts}
 Fail if ANY: YouTube intro / "Subscribe" / "Available in 4K" card; dead air / no spoken word within ~1.2s after
 the dialogue scene starts; audible speech / dialogue inside the intro or the final montage;
 spoken language not English; captions missing, covering a face, or clearly out of sync with the speech;
 more than ~20 seconds of talking / dialogue scene; black frames; music not audible at some point; drop not on the punch word or dead air before the montage;
+a montage that repeats a shot / near-identical framing, is mostly one static setting or talking heads, looks like
+one continuous clip, or whose shots have nothing to do with the dialogue's title, characters or mood;
+captions too big (covering much of the picture) or too small to read;
 an end card; watermark missing or on the black/blurred bars; total length outside 35-60 seconds;
 ANY channel outro / end screen / "like & subscribe" graphic or promo speech ANYWHERE in the video (also mid-video),
 or captions showing words like SUBSCRIBE / CHANNEL / SUPPORT US.
@@ -189,6 +205,30 @@ Return ONLY JSON:
 {{"pass": true, "issues": [], "trim_start": 0.0, "trim_end": 0.0, "retry_new_clip": false}}
 trim_start / trim_end = seconds to cut from the start / end only if a problem sits at an edge.
 retry_new_clip = true if the source clip itself is unusable."""
+
+
+SHOTS_PROMPT = """You pick montage shots for a RIYIO fan edit. Main scene context: {context}
+Watch this extra clip (360p, timestamps in seconds) and return ONLY JSON:
+{{"same_story": <bool>, "reject": <bool>, "reject_reason": "<string>",
+  "montage_shots": [{{"t": <seconds>, "energy": <1-10>, "kind": "<action|reaction|wide|close|hero|reveal>",
+                     "reason": "<why it fits>"}}]}}
+- same_story = true only if this is the SAME movie / show / game (same characters or story world).
+- reject = true if a channel / network logo or watermark, burned-in subtitles, split screen, reaction cam or
+  fan-edit text is visible in the shots you would use.
+- montage_shots: 10-25 DIFFERENT camera shots (no consecutive seconds of one shot), the strongest, most varied
+  moments that match the mood of the main dialogue (action, reactions, wide, close-ups, hero moments).
+  Skip title cards, rating cards, studio logos, release-date text, black frames and talking heads."""
+
+
+def pick_shots(video_360p: Path, context: dict) -> dict:
+    """Gemini pass on an extra source: same story? clean? which shots are relevant."""
+    try:
+        data, model = _ask(video_360p, SHOTS_PROMPT.format(context=json.dumps(context)[:1500]), MODELS, "SHOTS")
+        data["model"] = model
+        return data
+    except Exception as e:
+        print("SHOTS pass failed:", repr(e)[:200], flush=True)
+        return {"same_story": False, "reject": True, "reject_reason": "gemini shot pass failed"}
 
 
 def qc_inspect(video_360p: Path, facts: dict | None = None) -> dict:

@@ -6,13 +6,14 @@ import traceback
 import json, os, re, subprocess, shutil, random, math
 from pathlib import Path
 
-from pipeline_lib.gemini_brain import analyze, qc_inspect, prescreen, available as gemini_ok
+from pipeline_lib.gemini_brain import analyze, qc_inspect, prescreen, pick_shots, available as gemini_ok
 from pipeline_lib.audio_sync import detect_beats, whisper_words, detect_language
 from pipeline_lib.sourcing import search_candidates, download_url, download_bank_song
 from pipeline_lib.postprocess import upscale_hdr, buffer_post
 from pipeline_lib import style
 from pipeline_lib import captions as captions_mod
 from pipeline_lib import channel_blocklist, link_queue, channel_source
+from pipeline_lib import montage_select as msel
 
 # Rotating famous-scene bank by GENRE: iconic ENGLISH dialogue (anime = English dub; sports/games may use
 # English commentary / team radio / cutscene dialogue). GENRE env forces a genre, QUERY env forces a query.
@@ -190,10 +191,12 @@ def detect_letterbox(src, dur, w, h):
     return crop
 
 
-def prep_cut(src, dest, start, duration, audio=True, rgb=False, preset="fast"):
-    """Graded, sharpened, no-crop 4:5 cut (blurred fill top/bottom). Dialogue audio loudness-normalised."""
+def prep_cut(src, dest, start, duration, audio=True, rgb=False, preset="fast", crop=None):
+    """Graded, sharpened, no-crop 4:5 cut (blurred fill top/bottom). Dialogue audio loudness-normalised.
+    crop = that source's letterbox crop (extra sources have their own); every source is scaled to the same
+    1080 width, graded the same way and resampled to FPS, so mixed sources look like one edit."""
     cmd = ["ffmpeg", "-y", "-ss", f"{start:.3f}", "-t", f"{duration:.3f}", "-i", str(src),
-           "-filter_complex", style.frame_filter(rgb, LETTERBOX["crop"]), "-map", "[v]",
+           "-filter_complex", style.frame_filter(rgb, LETTERBOX["crop"] if crop is None else crop), "-map", "[v]",
            "-c:v", "libx264", "-preset", preset, "-crf", "14", "-pix_fmt", "yuv420p", "-movflags", "+faststart"]
     if audio:
         cmd += ["-map", "0:a:0?", "-af", "loudnorm=I=-16:TP=-1.5:LRA=11", "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2"]
@@ -310,7 +313,90 @@ def fetch_and_screen(url, info_hint, used_urls):
     return src, info, dur, w, h
 
 
-def build_draft(src, info, dur, w, h, query, demo, cand):
+TITLE_RE = re.compile(r"\|\s*([^|]+?)\s*\((?:19|20)\d\d\)")
+MAX_EXTRA = 2
+
+
+def title_key(info, plan):
+    """Movie / show name to find more footage of the same story (JoBlo style '| NAME (2000) Movie CLIP')."""
+    m = TITLE_RE.search(info.get("title") or "")
+    t = (m.group(1) if m else "") or str(plan.get("title") or "")
+    return re.sub(r"\s+", " ", t).strip()
+
+
+def fetch_extra_sources(info, plan, context, used_urls):
+    """Yield up to MAX_EXTRA related, clean sources: (path, crop, info, gemini_shots). Same clean-source order:
+    other clips of the same title on the trusted channels first, then search (official trailer / scenes).
+    Every extra gets the RapidAPI download, resolution check, logo pre-screen and a Gemini shot pass."""
+    key = title_key(info, plan)
+    if not key:
+        print("EXTRA: no title to search for", flush=True)
+        return
+    main_id = link_queue._vid(info.get("url", "")) if info.get("url") else ""
+    cands = []
+    for cu in channel_source.channel_urls():
+        try:
+            _, vids = channel_source.list_videos(cu)
+        except Exception as e:
+            print("EXTRA channel listing error", repr(e)[:120], flush=True)
+            continue
+        same = [v for v in vids if key.lower() in v["title"].lower() and v["id"] != main_id
+                and v["url"] not in used_urls and 30 <= (v["duration"] or 0) <= 900]
+        cands += sorted(same, key=lambda v: -(v["views"] or 0))[:3]
+    qs = [q for q in (plan.get("related_queries") or []) if isinstance(q, str)][:2] or \
+         [f"{key} official trailer", f"{key} best scenes 4K"]
+    got = 0
+    tried = 0
+    for q in [None] + qs:
+        if got >= MAX_EXTRA or tried >= 4:
+            break
+        items = cands if q is None else search_candidates(q, exclude=used_urls)[:2]
+        for it in items:
+            if got >= MAX_EXTRA or tried >= 4:
+                break
+            if it["url"] in used_urls or link_queue._vid(it["url"]) == main_id:
+                continue
+            tried += 1
+            used_urls.add(it["url"])
+            xpath = Path(f"clips/extra_{got + 1}.mp4")
+            xpath.unlink(missing_ok=True)
+            print(f"=== EXTRA SOURCE try {tried}: {it.get('title', '')[:80]} | {it.get('channel', '')}", flush=True)
+            xi = download_url(it["url"], xpath)
+            if not xi:
+                print("EXTRA rejected: no download", flush=True)
+                continue
+            xi = {**xi, **{k: v for k, v in it.items() if v}}
+            xd = probe_duration(xpath)
+            xw, xh = probe_video(xpath)
+            if min(xw, xh) < 700 or xd < 20:
+                print(f"EXTRA rejected: {xw}x{xh} {xd:.0f}s", flush=True)
+                continue
+            frames = []
+            for j, frac in enumerate((0.15, 0.35, 0.55, 0.75, 0.9)):
+                fp = Path(f"clips/xscreen_{got + 1}_{j}.jpg")
+                run(["ffmpeg", "-y", "-ss", f"{xd * frac:.2f}", "-i", str(xpath), "-frames:v", "1", "-vf", "scale=768:-2",
+                     "-q:v", "4", str(fp)])
+                if fp.exists():
+                    frames.append(fp)
+            if gemini_ok() and frames:
+                ps = prescreen(frames)
+                if not ps.get("clean"):
+                    print("EXTRA rejected by logo pre-screen:", ps.get("reason") or ps.get("flags"), flush=True)
+                    continue
+            xcrop = detect_letterbox(xpath, xd, xw, xh)
+            prev = Path(f"clips/extra_{got + 1}_360.mp4")
+            run(["ffmpeg", "-y", "-i", str(xpath), "-t", f"{usable_end(xd):.2f}", "-vf", "scale=-2:360", "-c:v", "libx264",
+                 "-preset", "ultrafast", "-crf", "30", "-an", str(prev)])
+            sp = pick_shots(prev, context) if gemini_ok() else {"same_story": True, "montage_shots": []}
+            if sp.get("reject") or sp.get("same_story") is False:
+                print("EXTRA rejected by Gemini:", sp.get("reject_reason") or "not the same story", flush=True)
+                continue
+            got += 1
+            print(f"EXTRA SOURCE {got} ok: {len(sp.get('montage_shots') or [])} relevant shots", flush=True)
+            yield xpath, xcrop, xi, [x for x in (sp.get("montage_shots") or []) if isinstance(x, dict)]
+
+
+def build_draft(src, info, dur, w, h, query, demo, cand, used_urls=None):
     """One screened source: Pass 1 -> words -> cuts -> render draft. Returns ctx dict."""
     genre = genre_of(query)
     min_words = 5 if genre in DIALOGUE_LIGHT else MIN_WORDS
@@ -461,45 +547,64 @@ def build_draft(src, info, dur, w, h, query, demo, cand):
     if int(math.floor(probe_duration(dlg) * FPS)) < dialogue_frames:
         raise CandidateRejected("dialogue cut shorter than planned")
 
-    # montage source times: Gemini's picks outside the dialogue, then even fill
+    # ---- montage shots: inventory of distinct camera shots, Gemini relevance, no repeats, multi-source ----
     need = n_in + len(outro_lens)
-    used_lo, used_hi = ds - 0.5, ds + D + 0.5
-    picks = []
-    for t in plan.get("action_cuts") or []:
-        try:
-            t = float(t)
-        except Exception:
-            continue
-        if lo <= t <= ue - 1.0 and not (used_lo <= t <= used_hi) and all(abs(t - p) > 0.6 for p in picks):
-            picks.append(t)
-    k = 0
-    base = list(picks)
-    while len(picks) < need and base and k < 8:
-        k += 1
-        for t in base:
-            t2 = t + 1.1 * k
-            if t2 <= ue - 1.0 and not (used_lo <= t2 <= used_hi) and all(abs(t2 - p) > 0.6 for p in picks):
-                picks.append(t2)
-    if len(picks) < need:
-        span = [x * 0.5 for x in range(int(lo * 2), int((ue - 1) * 2))]
-        span = [t for t in span if not (used_lo <= t <= used_hi) and all(abs(t - p) > 0.6 for p in picks)]
-        step = max(1, len(span) // max(1, need - len(picks) + 1))
-        picks += span[step::step][: need - len(picks)]
-    while len(picks) < need and picks:  # very short source: reuse moments (shifted) rather than fail
-        picks.append(picks[len(picks) % max(1, len(base) or 1)] + 0.4)
-    # the strongest Gemini picks open the video (intro), the rest drive the post-drop montage
+    intro_s = [f / FPS for f in intro_lens]
+    outro_s = [f / FPS for f in outro_lens]
+    used_urls = used_urls if used_urls is not None else set()
+    sources = {"main": (src, LETTERBOX["crop"])}
+    chunks = msel.inventory(src, "main", lo, ue, crop=LETTERBOX["crop"], blocked=[(ds, ds + D)])
+    gshots = [x for x in (plan.get("montage_shots") or []) if isinstance(x, dict)]
+    if msel.lazy_times([x.get("t") for x in gshots]):
+        print("Gemini montage_shots look evenly spaced (not real picks) -> ignored", flush=True)
+        gshots = []
+    if not gshots and not msel.lazy_times(plan.get("action_cuts") or []):
+        gshots = [{"t": t, "energy": 5, "kind": "action", "reason": "director action cut"}
+                  for t in plan.get("action_cuts") or [] if isinstance(t, (int, float))]
+    msel.apply_gemini(chunks, gshots, "main")
+    min_len = min(intro_s + outro_s)
+    pool = msel.unique_pool(chunks, min_len)
+    strong = [c for c in pool if c.energy >= 5 or c.motion >= 12]
+    print(f"MONTAGE main: {len(chunks)} chunks, {len(pool)} unique looks, {len(strong)} strong, need {need}; "
+          f"director says sufficient={plan.get('montage_sufficient')}", flush=True)
+    extras_used = []
+    if len(pool) < need or len(strong) < int(0.6 * need) or plan.get("montage_sufficient") is False:
+        context = {"title": plan.get("title") or info.get("title", ""), "scene": plan.get("scene", ""),
+                   "characters": plan.get("characters") or [], "dialogue": " ".join(w["word"] for w in words),
+                   "mood": mood, "hook": plan.get("hook_title", "")}
+        for k, (xpath, xcrop, xinfo, xshots) in enumerate(fetch_extra_sources(info, plan, context, used_urls)):
+            sid = f"x{k + 1}"
+            xd = probe_duration(xpath)
+            xc = msel.inventory(xpath, sid, min(3.0, xd * 0.05), usable_end(xd), crop=xcrop)
+            msel.apply_gemini(xc, xshots, sid)
+            # an extra source only contributes the shots Gemini judged relevant (or clearly moving)
+            xc = [c for c in xc if c.energy >= 4 or c.motion >= 14]
+            chunks += xc
+            sources[sid] = (xpath, xcrop)
+            extras_used.append({"id": sid, "title": xinfo.get("title", ""), "channel": xinfo.get("channel", ""),
+                                "url": xinfo.get("url", ""), "chunks": len(xc)})
+            pool = msel.unique_pool(chunks, min_len)
+            strong = [c for c in pool if c.energy >= 5 or c.motion >= 12]
+            print(f"MONTAGE +{sid}: {len(xc)} relevant chunks -> {len(pool)} unique, {len(strong)} strong", flush=True)
+            if len(pool) >= need and len(strong) >= int(0.6 * need):
+                break
+    try:
+        picks = msel.select(chunks, intro_s, outro_s)
+    except msel.NotEnough as e:
+        raise CandidateRejected(f"not enough distinct montage shots ({e}) even with {len(extras_used)} extra source(s)")
+    bad = msel.audit(picks)
+    if bad:
+        raise CandidateRejected("montage audit: " + "; ".join(bad[:3]))
+    print("MONTAGE picks:", json.dumps([{k: p[k] for k in ("src", "start", "dur", "role", "energy", "kind")}
+                                        for p in picks]), flush=True)
     lens = intro_lens + outro_lens
     paths = []
-    for i, (t, want) in enumerate(zip(picks, lens)):
+    for i, (pk, want) in enumerate(zip(picks, lens)):
         ap = Path(f"clips/action_{i}.mp4")
-        ok = False
-        for tt in (t, max(lo, t - 1.5), max(0.0, lo - 3.0)):
-            prep_cut(src, ap, tt, want / FPS + 0.15, audio=False, rgb=True)
-            if ap.exists() and int(math.floor(probe_duration(ap) * FPS)) >= want:
-                ok = True
-                break
-        if not ok:
-            raise CandidateRejected(f"montage cut {i} too short at {t:.1f}s")
+        xpath, xcrop = sources[pk["src"]]
+        prep_cut(xpath, ap, pk["start"], want / FPS + 0.15, audio=False, rgb=True, crop=xcrop)
+        if not ap.exists() or int(math.floor(probe_duration(ap) * FPS)) < want:
+            raise CandidateRejected(f"montage cut {i} too short at {pk['src']}@{pk['start']:.1f}s")
         paths.append(ap)
     if len(paths) != need or need < 12:
         raise CandidateRejected(f"only {len(paths)}/{need} montage cuts")
@@ -586,6 +691,9 @@ def build_draft(src, info, dur, w, h, query, demo, cand):
             "intro_s": round(intro_frames_total / FPS, 2), "intro_cuts": n_in,
             "dialogue_start_s": round(intro_frames_total / FPS, 2),
             "montage_start_s": round((intro_frames_total + dialogue_frames) / FPS, 3),
+            "montage_sources": 1 + len(extras_used), "extra_sources": extras_used,
+            "montage_picks": [{k: p[k] for k in ("src", "start", "dur", "role", "energy", "kind", "reason")} for p in picks],
+            "montage_repeats": len(msel.audit(picks)),
             "song": song_name, "song_start_s": tl["song_start"], "song_drop_beat_s": tl["song_drop_beat"],
             "beat_s": tl["ibi"], "words": len(words), "language": lang,
             "dialogue_s": round(dialogue_frames / FPS, 2), "montage_s": round(sum(outro_lens) / FPS, 2),
@@ -650,7 +758,7 @@ def query_plan(tried):
 def _attempt(url, hint, query, used_urls, demo, n, link=False, track=None):
     try:
         src, info, dur, w, h = fetch_and_screen(url, hint, used_urls)
-        ctx = build_draft(src, info, dur, w, h, query, demo, n)
+        ctx = build_draft(src, info, dur, w, h, query, demo, n, used_urls)
         Path("rejects.json").write_text(json.dumps(REJECTS, indent=2))
         if link or track:
             link_queue.mark(url, track or "used", info.get("title", ""))
@@ -774,6 +882,8 @@ def main():
                  "intro_montage_s": pl.get("intro_s"), "dialogue_start_s": pl.get("dialogue_start_s"),
                  "montage_start_s": pl.get("montage_start_s"), "montage_cuts": pl.get("montage_cuts"),
                  "dialogue_s": pl.get("dialogue_s"), "montage_s": pl.get("montage_s"), "end_card": "none",
+                 "montage_unique_shots": len(pl.get("montage_picks") or []), "montage_sources": pl.get("montage_sources"),
+                 "montage_repeats_found": pl.get("montage_repeats"),
                  "watermark": "RIYIO inside the picture, bottom-center", "black_segments": blacks,
                  "silent_segments": silences}
         print("QC FACTS", json.dumps(facts), flush=True)
@@ -787,6 +897,8 @@ def main():
             local.append(f"black frames: {blacks[:3]}")
         if silences:
             local.append(f"music not audible: {silences[:3]}")
+        if pl.get("montage_repeats"):
+            local.append(f"montage repeats {pl.get('montage_repeats')} shot(s)")
         if abs(_num(pl.get("drop_s"), 0) - _num(pl.get("punch_s"), -9)) > 0.05:
             local.append("drop not on the punch word")
         if local:

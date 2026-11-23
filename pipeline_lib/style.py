@@ -151,6 +151,16 @@ def median_ibi(beats: list[float], default: float = 0.5) -> float:
     return min(max(ibi, 0.25), 1.5)
 
 
+def subdivide_slow(beats: list[float], slow: float = 0.75) -> list[float]:
+    """librosa often locks onto half-time (e.g. 61 BPM for a 122 BPM track -> ~1-2 s cuts, too slow vs the refs).
+    When beats are > `slow` s apart, add the half-beats so cuts land on 0.4-1.0 s like the reference edits."""
+    sb = sorted(beats)
+    if len(sb) < 4 or median_ibi(sb) <= slow:
+        return sb
+    mids = [(sb[i] + sb[i + 1]) / 2 for i in range(len(sb) - 1)]
+    return sorted(sb + mids)
+
+
 def beat_cuts(grid: list[float], start: float, end: float, pattern: list[int], unit: int,
               flurry: int = 0) -> list[tuple[float, str]]:
     """Hard cuts on `grid` (video-time beats) from start to end. Pattern is in beat units;
@@ -188,6 +198,7 @@ def plan_timeline(song_beats: list[float], song_drop: float, song_len: float, dl
     if dlg_len <= punch_rel:
         raise ValueError("punch must be inside the dialogue")
     sb = sorted(b for b in song_beats if b >= 0)
+    sb = subdivide_slow(sb)
     ibi = median_ibi(sb)
     unit = beat_unit(ibi)
     # intro: video 0 and the punch word (drop) are both on the beat grid -> intro + punch_rel = n beats.

@@ -38,7 +38,7 @@ def check(bpm, dlg_len, punch_back, jitter=0.0):
     assert S >= -1e-6 and S + total <= 200.0
     assert abs(r["song_drop_beat"] - S - r["drop_s"]) < 3e-3
     assert r["song_drop_beat"] >= 45.0 - 1e-3
-    grid = [b - S for b in beats]
+    grid = [b - S for b in style.subdivide_slow(beats)]
     if not jitter:
         assert _on_grid(0.0, grid), (bpm, dlg_len)              # video starts on a beat
         assert _on_grid(r["drop_s"], grid)                     # drop on a beat
@@ -85,6 +85,12 @@ def test_late_detected_drop_falls_back_to_earlier_beat():
     beats = _song(128, length=90.0)
     r = style.plan_timeline(beats, song_drop=85.0, song_len=90.0, dlg_len=12.0, punch_rel=11.4)
     assert r["song_start"] >= 0 and r["song_start"] + r["total_s"] <= 90.0
+
+
+def test_half_time_song_is_subdivided():
+    r = check(61, 10.0, 0.5)          # librosa half-time lock -> cuts must still be < ~1.1 s mostly
+    cuts = [c for c, _ in r["outro_cuts"][1:-1]]
+    assert r["ibi"] < 0.75 and sum(c <= 1.1 for c in cuts) >= 0.6 * len(cuts)
 
 
 def test_fast_song_uses_two_beat_units():

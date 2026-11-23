@@ -74,6 +74,30 @@ def _font(name: str, size: int):
     return _FONT_CACHE[key]
 
 
+# Caption text sizes on the 1080x1350 frame, matched to the reference edits (ref1/ref2: caption cap height
+# ~5-6% of the frame, ~45-70 px keys on 1080 wide). Never bigger than this, never unreadably small.
+SIZE_LIMITS = {"filler": (34, 60), "key": (52, 96), "punch": (64, 112)}
+BASE_FRAC = 0.62      # size_h = W * BASE_FRAC -> pro-edit key .098 ~ 66 px
+WORDS_SCALE = {1: 1.22, 2: 1.1, 3: 1.0}   # fewer words -> bigger, 4 words -> 0.92
+
+
+def clamp_size(px: float, kind: str) -> int:
+    lo, hi = SIZE_LIMITS[kind]
+    return int(min(max(px, lo), hi))
+
+
+def free_width(main, pat, W: int) -> float:
+    """Width available beside the speaker's face (pro-edit puts the caption next to the speaker)."""
+    margin = W * 0.05
+    if not main:
+        return W * 0.62
+    fx = (main[0] + main[2]) / 2 * W
+    fw = (main[2] - main[0]) * W
+    right = W - margin - (fx + fw * pat["gap"])
+    left = fx - fw * pat["gap"] - margin
+    return max(W * 0.38, min(W * 0.62, max(left, right)))
+
+
 def style_items(ch: list[dict], pat: dict, size_h: float, color_i: int, punch_i: int | None):
     """pro-edit style_items: filler words small + white, key words big + next palette colour."""
     items = []
@@ -84,12 +108,13 @@ def style_items(ch: list[dict], pat: dict, size_h: float, color_i: int, punch_i:
         if not t:
             continue
         if (base in FILLER or len(base) <= 2) and not is_punch:
-            items.append({"t": t, "c": "#FFFFFF", "size": int(size_h * pat["filler"]), "small": True,
+            items.append({"t": t, "c": "#FFFFFF", "size": clamp_size(size_h * pat["filler"], "filler"), "small": True,
                           "s": w["s"], "e": w["e"]})
         else:
             col = (255, 46, 60) if is_punch else tuple(pat["keys"][color_i % len(pat["keys"])])
             color_i += 1
-            size = int(size_h * (pat["key"] if len(base) <= 8 else pat["key_long"]) * (1.25 if is_punch else 1.0))
+            size = clamp_size(size_h * (pat["key"] if len(base) <= 8 else pat["key_long"]) * (1.25 if is_punch else 1.0),
+                              "punch" if is_punch else "key")
             items.append({"t": t, "c": "#%02X%02X%02X" % col, "size": size, "small": False, "s": w["s"], "e": w["e"],
                           "punch": is_punch})
     return items, color_i
@@ -226,7 +251,7 @@ def place_beside(bw, bh, pat, step, faces, main, W, H, band, alt):
 def build_events(groups: list[dict], punch_i: int | None, pat: dict, dialogue_video: Path,
                  W: int, H: int, band: tuple, fps: int) -> tuple[list[dict], dict]:
     """groups: [{'start','end','words':[{word,s,e,i}]}] -> Remotion caption events with x/y/lines."""
-    size_h = min(max((band[1] - band[0]) / (W * 9 / 21), 0.8), 1.1) * H  # pro-edit sizes assume a 21:9 band
+    size_h = W * BASE_FRAC  # sized to the frame width like the reference edits (old: ~H -> 150 px, too big)
     need = set()
     for g in groups:
         f0, f1 = int(round(g["start"] * fps)), int(round(g["end"] * fps))
@@ -246,15 +271,17 @@ def build_events(groups: list[dict], punch_i: int | None, pat: dict, dialogue_vi
             fset += faces_at.get(fi, [])
         mid = faces_at.get((f0 + f1) // 2, []) or faces_at.get(f0, [])
         main = max(mid, key=lambda b: (b[2] - b[0]) * (b[3] - b[1])) if mid else None
-        ci0, k = color_i, 1.0
-        while True:  # keep the pro-edit proportions, shrink only until the block fits beside the speaker
+        nwords = len([w for w in g["words"] if clean_word(w["word"])])
+        ci0, k = color_i, WORDS_SCALE.get(nwords, 0.92)
+        avail = free_width(main, pat, W)
+        while True:  # pro-edit proportions; shrink (down to the readable minimum) until it fits beside the speaker
             items, color_i = style_items(g["words"], pat, size_h * k, ci0, punch_i)
             if not items:
                 break
             lines, bw, bh, pad = layout_block(items, pat["font"], pat["look"])
-            if (bh <= 0.85 * (band[1] - band[0]) and bw <= 0.62 * W) or k < 0.4:
+            if (bh <= 0.6 * (band[1] - band[0]) and bw <= avail) or k < 0.7:
                 break
-            k *= 0.9
+            k *= 0.93
         if not items:
             continue
         x, y, align, ov, zone = place_beside(bw, bh, pat, n, fset, main, W, H, band, alt)
