@@ -44,12 +44,24 @@ BiBi rules: length 35s-60s; English captions synced to lips; best quality; Gemin
 - Genres rotate: movies, web series, games (official cinematics/cutscenes), sports (F1 team radio/overtakes, football commentary), anime (English dub), cartoons/animated films. Sports/games may use English commentary/team radio as dialogue (>= 5 words).
 - Fonts are bundled in remotion/public/fonts (Anton, Playfair Display; SIL OFL).
 
-## Update (Nov 23 2026, BiBi): SAME setup as Skywalker — overrides dialogue length / structure above
-- Old videos had too much talking. Now: SHORT dialogue hook only (5-11 s, ends on the punch word), then the
-  main part (~75-85% of runtime, total ~40 s) is a beat-synced fast-cut montage, music at 0 dB, no dialogue.
-- Montage rhythm (like the Skywalker example https://youtu.be/ieltf77ofiA): 4-cut flurry on the drop, then
-  1-1-2 beat hard cuts (~0.45-1.0 s) with a 2-3.5 s hero shot about every 9th cut (max 3), punch-in per cut,
-  white flash only on hero shots. Gemini's best action picks go to the hero slots.
-- Unchanged: no logos (source order source_url -> links/queue.txt -> channels/channels.txt -> search),
-  RIYIO watermark, English, 35-60 s, 2-pass Gemini QC, outro cut.
+## Update (Nov 23 2026, BiBi): pro-edit / Vice Cartel timeline — overrides structure + dialogue length above
+Reference: https://youtu.be/ieltf77ofiA (made by pro-edit vicestyle.py, song ~128 BPM, 53 s). Measured:
+| part | time | what |
+|---|---|---|
+| intro montage | 0-12.0 s | ~13 hard cuts on the beat (1-2 beats = 0.47-0.97 s, one 1.9 s), song at 100% |
+| dialogue 1 | 12.0-24.8 s | 4 shots, speaker-side captions, song ducked under the voices |
+| mid montage | 24.8-30.5 s | 7 beat cuts (0.47-1.9 s) |
+| dialogue 2 | 30.5-41.7 s | 1 long shot, ends on the punch name "Lucia Caminos" |
+| drop + outro montage | 41.7-52.0 s | ~20 cuts of 0.47-0.97 s on every 1-2 beats, song 100% |
+| end | 52.0-52.5 s | cut to black, music off |
+
+riyio (one source clip) uses the same shape with ONE middle dialogue:
+- intro montage ~6-12 s (pro-edit hook_pat 2-2-2-1-1-2 beats), song full level, hook question caption on top.
+- dialogue 8-18 s in the middle, pro-edit speaker-side captions (P01-P15 + R00 glow), song ducked to ~-11 dB.
+- the song's drop beat lands exactly on the punch word (white flash + hit), dialogue stops, then a fast montage
+  (4-cut flurry, then pro-edit end_pat 1-1-2-1 beats) with the song at full level to the end. Total ~42 s (35-59).
+- one song plays continuously; video 0, the punch word and every montage cut sit on its beat grid
+  (`style.plan_timeline`, tested in tests/test_timeline.py).
+- Unchanged: no logos (source_url -> links/queue.txt -> channels/channels.txt -> search), RIYIO watermark,
+  English, 2-pass Gemini QC, outro cut, no end card.
 - Auto-post is OFF: schedule commented out in riyio-v2.yml and publishing needs repo variable RIYIO_AUTO_PUBLISH=1.

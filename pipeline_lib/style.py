@@ -125,48 +125,109 @@ def montage_cuts(beats_comp: list[float], start: float, length: float) -> list[f
 
 
 
-def montage_plan_sky(beats_comp: list[float], start: float, length: float) -> list[tuple[float, str]]:
-    """Skywalker / reference-edit montage: hard cuts on the beat grid from `start`.
-    Opens with a 4-cut flurry (1 beat each) right after the drop, then a 1-1-2 beat rhythm
-    (~0.45-1.0s cuts) with a 2-3.5s hero shot about every 9th cut (max 3). Returns (seconds, kind)."""
-    bs = sorted(b for b in beats_comp if b > start + 0.05)
-    if len(bs) > 3:
-        diffs = sorted(bs[i + 1] - bs[i] for i in range(len(bs) - 1))
-        ibi = diffs[len(diffs) // 2]
-    else:
-        ibi = 0.5
-    ibi = min(max(ibi, 0.25), 1.2)
-    unit = 1 if ibi >= 0.42 else 2                      # never shorter than ~0.42s
-    hero_beats = max(2, int(round(2.6 / ibi)))
-    while hero_beats * ibi > 3.6 and hero_beats > 2:
-        hero_beats -= 1
-    rhythm = [unit, unit, 2 * unit]
-    grid = [start] + bs
-    end = start + length
-    while grid[-1] < end + 4 * ibi:
-        grid.append(grid[-1] + ibi)
-    out, k, n, heroes = [], 0, 0, 0
-    t = start
-    while t < end - 0.3:
-        if n < 4:
-            step, kind = unit, "flurry"
-        elif n % 9 == 8 and heroes < 3:
-            step, kind = hero_beats, "hero"
-        else:
-            step, kind = rhythm[n % 3], "beat"
-        k2 = min(len(grid) - 1, k + step)
-        d = grid[k2] - t
-        if end - (t + d) < 0.35:
+# ---------------------------------------------------------------- pro-edit (Vice Cartel) timeline
+# Measured from the reference edit https://youtu.be/ieltf77ofiA (pro-edit vicestyle.py, ~128 BPM):
+#   0-12.0s intro montage (music 100%, cuts on 1-2 beats) -> 12-41.7s dialogue (music ducked, speaker-side
+#   captions) -> drop on the last punch word -> 41.7-52s fast montage (1-2 beat cuts) to the end.
+INTRO_TARGET_S = 9.0          # intro montage (beats, music full)
+INTRO_MIN_S, INTRO_MAX_S = 6.0, 12.5
+OUTRO_MIN_S = 9.0             # fast montage after the drop
+TIMELINE_TARGET_S = 42.0
+TIMELINE_MIN_S, TIMELINE_MAX_S = 35.0, 59.0
+HOOK_PAT = [2, 2, 2, 1, 1, 2]     # vicestyle.py hook_pat (in beat units)
+END_PAT = [1, 1, 2, 1]            # vicestyle.py end_pat
+MIN_CUT_S = 0.35
+
+
+def beat_unit(ibi: float) -> int:
+    """1 beat per unit, or 2 on very fast songs so no cut is shorter than ~0.42s."""
+    return 1 if ibi >= 0.42 else 2
+
+
+def median_ibi(beats: list[float], default: float = 0.5) -> float:
+    bs = sorted(beats)
+    d = sorted(bs[i + 1] - bs[i] for i in range(len(bs) - 1) if bs[i + 1] - bs[i] > 0.15)
+    ibi = d[len(d) // 2] if d else default
+    return min(max(ibi, 0.25), 1.5)
+
+
+def beat_cuts(grid: list[float], start: float, end: float, pattern: list[int], unit: int,
+              flurry: int = 0) -> list[tuple[float, str]]:
+    """Hard cuts on `grid` (video-time beats) from start to end. Pattern is in beat units;
+    the first `flurry` cuts are single units (rapid hits right after the drop)."""
+    g = sorted(b for b in grid if start + 0.05 < b < end + 8.0)
+    ibi = median_ibi(g) if len(g) > 2 else 0.5
+    while not g or g[-1] < end + 2 * ibi:   # extend past the song's detected beats if needed
+        g.append((g[-1] if g else start) + ibi)
+    g = [start] + g
+    out, k, n, t = [], 0, 0, start
+    while t < end - 1e-3:
+        steps = unit if n < flurry else pattern[(n - flurry) % len(pattern)] * unit
+        k2 = min(len(g) - 1, k + steps)
+        d = g[k2] - t
+        if d < MIN_CUT_S:                      # odd grid gap: take one more beat
+            k2 = min(len(g) - 1, k2 + 1)
+            d = g[k2] - t
+        if end - (t + d) < MIN_CUT_S:          # never leave a sliver at the end
             d = end - t
-        if d <= 0.05:
+        if d <= 1e-3:
             break
-        if kind == "hero":
-            heroes += 1
-        out.append((round(d, 3), kind))
+        out.append((round(d, 3), "flurry" if n < flurry else "beat"))
         t += d
         k = k2
         n += 1
     return out
+
+
+def plan_timeline(song_beats: list[float], song_drop: float, song_len: float, dlg_len: float,
+                  punch_rel: float, target: float = TIMELINE_TARGET_S) -> dict:
+    """pro-edit timeline: intro montage -> dialogue (punch at punch_rel inside it) -> drop -> montage.
+    song_beats / song_drop / song_len are song seconds; dlg_len = dialogue length (ends after the punch word);
+    punch_rel = punch word start inside the dialogue. The song plays continuously from `song_start`, so the
+    drop beat lands exactly on the punch word. Raises ValueError if it cannot fit 35-59s."""
+    if dlg_len <= punch_rel:
+        raise ValueError("punch must be inside the dialogue")
+    sb = sorted(b for b in song_beats if b >= 0)
+    ibi = median_ibi(sb)
+    unit = beat_unit(ibi)
+    # intro: video 0 and the punch word (drop) are both on the beat grid -> intro + punch_rel = n beats.
+    # (run_v2 also nudges the dialogue lead so punch_rel ~ whole beats, then the cut into the dialogue is on a beat too)
+    n = max(1, int(round((INTRO_TARGET_S + punch_rel) / ibi)))
+    intro = n * ibi - punch_rel
+    while intro < INTRO_MIN_S:
+        intro += ibi
+    while intro > INTRO_MAX_S and intro - ibi >= INTRO_MIN_S:
+        intro -= ibi
+    # keep the dialogue in the middle and the whole video inside 35-59s
+    outro = max(OUTRO_MIN_S, target - intro - dlg_len)
+    if intro + dlg_len + outro < TIMELINE_MIN_S:
+        outro = TIMELINE_MIN_S + 0.5 - intro - dlg_len
+    if intro + dlg_len + outro > TIMELINE_MAX_S:
+        outro = TIMELINE_MAX_S - 0.3 - intro - dlg_len
+        if outro < OUTRO_MIN_S * 0.6:
+            raise ValueError(f"dialogue {dlg_len:.1f}s too long for {TIMELINE_MAX_S:.0f}s")
+    P = intro + punch_rel                      # punch word (= drop) in video time
+    total = intro + dlg_len + outro
+    # song anchor: a beat >= the detected drop (and >= P so the song starts at >= 0s)
+    # (falls back to any beat >= P when the detected drop sits too late in the song)
+    cands = [b for b in sb if b >= max(song_drop - 1e-3, P)] + [b for b in sb if P <= b < song_drop - 1e-3]
+    drop_b = None
+    for b in cands:
+        if b - P + total <= song_len - 0.2:
+            drop_b = b
+            break
+    if drop_b is None:
+        raise ValueError("song too short for this timeline")
+    S = drop_b - P                             # song second at video 0
+    grid = [b - S for b in sb if b - S > -1e-3]
+    intro_cuts = beat_cuts(grid, 0.0, intro, HOOK_PAT, unit)
+    D_end = intro + dlg_len
+    outro_cuts = beat_cuts(grid, D_end, total, END_PAT, unit, flurry=4)
+    return {"ibi": round(ibi, 4), "unit": unit, "intro_s": round(intro, 3), "dialogue_start_s": round(intro, 3),
+            "dialogue_end_s": round(D_end, 3), "drop_s": round(P, 3), "total_s": round(total, 3),
+            "song_start": round(S, 3), "song_drop_beat": round(drop_b, 3),
+            "intro_cuts": intro_cuts, "outro_cuts": outro_cuts}
+
 
 def good_hook(h: str) -> bool:
     h = (h or "").strip().strip('"').strip()

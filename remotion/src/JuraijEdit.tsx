@@ -12,12 +12,17 @@ type Rect = {x: number; y: number; w: number; h: number};
 export type JuraijProps = {
   hook: string;            // white top banner title (whole video)
   hookQuestion: string;    // first caption at 0s
+  // pro-edit timeline: intro montage -> dialogue (music ducked) -> drop on the punch word -> montage
+  introClips?: string[];   // opening beat-cut montage, music at full level
+  introFrames?: number[];
   dialogueSrc: string;
-  dialogueFrames: number;  // phase 1 ends when the punch word ends (character goes quiet)
-  dropFrame: number;       // punch word start = beat drop
-  actionClips: string[];
+  dialogueFrom?: number;   // frame where the dialogue starts (= sum of introFrames)
+  dialogueFrames: number;  // dialogue ends when the punch word ends (character goes quiet)
+  dropFrame: number;       // absolute frame of the punch word start = beat drop
+  actionClips: string[];   // post-drop montage
   actionFrames: number[];
-  actionKinds?: string[];  // flurry | beat | hero
+  actionKinds?: string[];  // flurry | beat
+  musicSrc?: string;       // one song for the whole video (drop beat on dropFrame)
   captions: CapEvent[];
   captionFont: 'anton' | 'playfair';
   captionLook: 'shadow' | 'glow';
@@ -47,11 +52,11 @@ const FONT = {anton: '"RiyioAnton", "Anton", Impact, sans-serif', playfair: '"Ri
 
 const ActionClip: React.FC<{src: string; kind?: string}> = ({src, kind}) => {
   const frame = useCurrentFrame();
-  // hard cuts on the beat (Skywalker style): punch-in on every cut, white flash only on hero shots
-  const zoom = kind === 'hero'
-    ? interpolate(frame, [0, 90], [1.0, 1.08], {extrapolateRight: 'clamp'})
-    : interpolate(frame, [0, 6], [1.08, 1.0], {extrapolateRight: 'clamp'});
-  const flash = kind === 'hero' ? interpolate(frame, [0, 3], [0.5, 0], {extrapolateRight: 'clamp'}) : 0;
+  // pro-edit hard cuts on the beat with a slight 1.04 crop-in; the post-drop flurry gets a quick punch-in
+  const zoom = kind === 'flurry'
+    ? interpolate(frame, [0, 5], [1.1, 1.04], {extrapolateRight: 'clamp'})
+    : 1.04;
+  const flash = 0;
   return (
     <AbsoluteFill>
       <OffthreadVideo src={staticFile(src)} muted style={{width: '100%', height: '100%', transform: `scale(${zoom})`}} />
@@ -97,36 +102,51 @@ export const JuraijEdit: React.FC<JuraijProps> = (p) => {
   const frame = useCurrentFrame();
   const {fps, durationInFrames} = useVideoConfig();
   const t = frame / fps;
+  const DF = p.dialogueFrom || 0;
   const D = p.dialogueFrames;
   const font = FONT[p.captionFont] || FONT.anton;
   const pic = p.picture || {x: 0, y: 0, w: 1080, h: 1350};
 
-  // montage cut layout right after phase 1 (no end card)
-  let cursor = D;
+  // intro montage from frame 0, dialogue at DF, post-drop montage right after the dialogue (no end card)
+  let icur = 0;
+  const intro = (p.introClips || []).map((src, i) => {
+    const len = Math.max(1, Math.round((p.introFrames || [])[i] || 0.45 * fps));
+    const from = icur;
+    icur += len;
+    return {src, from, len};
+  });
+  let cursor = DF + D;
   const seqs = p.actionClips.map((src, i) => {
     const len = Math.max(1, Math.round(p.actionFrames[i] || 0.45 * fps));
     const from = cursor;
     cursor += len;
     return {src, from, len};
   });
-  const inDialogue = frame < D;
+  const inDialogue = frame >= DF && frame < DF + D;
+  const tRel = (frame - DF) / fps;   // caption times are relative to the dialogue clip
 
-  // hook question = first caption at 0s (until the first spoken word)
-  const firstCap = p.captions.length ? p.captions[0].start : 1;
-  const hqEnd = Math.min(1.0, Math.max(0.5, firstCap));
+  // hook question = first caption over the opening montage (pro-edit hook)
+  const hqEnd = DF > 0 ? Math.min(1.6, DF / fps) : Math.min(1.0, Math.max(0.5, p.captions.length ? p.captions[0].start : 1));
   const showHQ = t < hqEnd && !!p.hookQuestion;
-  const cap = inDialogue ? p.captions.find((c) => t >= c.start && t < c.end) : undefined;
+  const cap = inDialogue ? p.captions.find((c) => tRel >= c.start && tRel < c.end) : undefined;
 
   return (
     <AbsoluteFill style={{backgroundColor: '#000'}}>
-      {/* Phase 1: continuous dialogue scene (pre-graded, no crop, blurred fill) */}
+      {/* Intro: beat-synced montage, music at full level */}
+      {intro.map((s, i) => (
+        <Sequence key={`i${i}`} from={s.from} durationInFrames={s.len}>
+          <ActionClip src={s.src} kind="beat" />
+        </Sequence>
+      ))}
+
+      {/* Middle: continuous dialogue scene (pre-graded, no crop, blurred fill), music ducked */}
       {p.dialogueSrc && D > 0 ? (
-        <Sequence from={0} durationInFrames={D}>
+        <Sequence from={DF} durationInFrames={D}>
           <OffthreadVideo src={staticFile(p.dialogueSrc)} volume={1} style={{width: '100%', height: '100%'}} />
         </Sequence>
       ) : null}
 
-      {/* Phase 2: beat-synced montage, music only */}
+      {/* After the drop: fast beat-synced montage, music only, to the end */}
       {seqs.map((s, i) => (
         <Sequence key={i} from={s.from} durationInFrames={s.len}>
           <ActionClip src={s.src} kind={(p.actionKinds || [])[i]} />
@@ -158,7 +178,7 @@ export const JuraijEdit: React.FC<JuraijProps> = (p) => {
       )}
 
       {/* Word-synced, speaker-side captions (phase 1 only) */}
-      {cap && !showHQ ? <Caption ev={cap} t={t} frame={frame} fps={fps} font={font} look={p.captionLook} /> : null}
+      {cap && !showHQ ? <Caption ev={cap} t={tRel} frame={frame - DF} fps={fps} font={font} look={p.captionLook} /> : null}
 
       {/* RIYIO watermark INSIDE the picture: small bold condensed sans, white ~65%, bottom-center (VICE CARTEL look) */}
       <div style={{position: 'absolute', left: pic.x, width: pic.w, top: pic.y + pic.h - pic.h * 0.055 - p.wmSize,
@@ -167,7 +187,18 @@ export const JuraijEdit: React.FC<JuraijProps> = (p) => {
         RIYIO
       </div>
 
-      {/* Audio: dark bed ~-11 dB under the whole dialogue -> drop at 0 dB exactly on the punch word */}
+      {/* Audio: one song the whole video — full in the intro, ducked (bedVolume ~-11 dB) under the dialogue,
+          back to full exactly on the punch word (drop) and through the montage */}
+      {p.musicSrc ? (
+        <Audio src={staticFile(p.musicSrc)}
+          volume={(f) => {
+            const duck = p.bedVolume;
+            const a = interpolate(f, [Math.max(0, DF - 6), Math.max(1, DF)], [1, duck], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
+            const back = f >= p.dropFrame ? interpolate(f, [p.dropFrame, p.dropFrame + 2], [duck, 1], {extrapolateRight: 'clamp'}) : a;
+            const tail = interpolate(f, [durationInFrames - 6, durationInFrames], [1, 0.6], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
+            return (DF > 0 ? back : (f >= p.dropFrame ? 1 : duck)) * tail;
+          }} />
+      ) : null}
       {p.bedSrc ? (
         <Sequence from={0} durationInFrames={Math.max(1, p.dropFrame + 3)}>
           <Audio src={staticFile(p.bedSrc)}

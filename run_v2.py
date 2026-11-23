@@ -7,7 +7,7 @@ import json, os, re, subprocess, shutil, random, math
 from pathlib import Path
 
 from pipeline_lib.gemini_brain import analyze, qc_inspect, prescreen, available as gemini_ok
-from pipeline_lib.audio_sync import detect_beats, whisper_words, detect_language, audible_start
+from pipeline_lib.audio_sync import detect_beats, whisper_words, detect_language
 from pipeline_lib.sourcing import search_candidates, download_url, download_bank_song
 from pipeline_lib.postprocess import upscale_hdr, buffer_post
 from pipeline_lib import style
@@ -131,10 +131,10 @@ MAX_LEAD = 0.9         # max seconds before the first spoken word (intro trim)
 INTRO_SKIP = 15.0      # never dialogue_start < 15s on sources longer than 60s
 MAX_QC_RETRIES = 2
 END_CARD_S = 0.0      # end card removed (BiBi, Nov 22)
-# Skywalker setup (BiBi, Nov 23): short dialogue hook, most of the runtime is a beat-synced fast-cut montage.
-DLG_MIN, DLG_MAX = 5.0, 11.0      # phase 1 (dialogue hook) seconds, ends on the punch word
-TOTAL_MIN, TOTAL_MAX = 35.0, 59.0
-TOTAL_TARGET = 40.0               # ~70-85% of it is montage (music only)
+# pro-edit / Vice Cartel timeline (BiBi, Nov 23): intro montage -> dialogue in the middle -> drop -> montage.
+DLG_MIN, DLG_MAX = 8.0, 18.0      # middle dialogue seconds aimed for (ends on the punch word)
+DLG_HARD_MIN = 5.0                # only windows shorter than this are rejected (planner fits any 5-18s)
+TOTAL_MIN, TOTAL_MAX = style.TIMELINE_MIN_S, style.TIMELINE_MAX_S
 BED_GAIN = 0.28                   # ~ -11 dB under the dialogue
 BED_SONGS = {"emotional_romance": ["epic_4.mp3", "epic_7.mp3"],
              "default": ["epic_5.mp3", "epic_4.mp3", "dark_6.mp3", "dark_4.mp3"]}
@@ -351,7 +351,7 @@ def build_draft(src, info, dur, w, h, query, demo, cand):
         ds = max(lo, de - (DLG_MIN + 3))
     if de - ds > DLG_MAX + 2:
         ds = de - (DLG_MAX + 1)
-    if de - ds < DLG_MIN:
+    if de - ds < DLG_HARD_MIN:
         raise CandidateRejected(f"dialogue window too short {ds:.1f}-{de:.1f}")
     win_len = min(ue - ds, de - ds + 1.5)
     words, lang = transcribe_window(src, ds, win_len)
@@ -396,39 +396,73 @@ def build_draft(src, info, dur, w, h, query, demo, cand):
     print(f"PUNCH '{words[pidx]['word']}' at {punch_s:.2f}-{punch_e:.2f}s (window start {ds:.2f}, "
           f"first word {words[0]['s']:.2f}s)", flush=True)
 
-    # ---- music: dark bed (ducked, whole dialogue) + phonk/epic drop at 0 dB exactly on the punch word ----
+    # ---- pro-edit timeline: intro montage -> dialogue (music ducked) -> drop on the punch word -> montage ----
     mood = plan.get("mood") or "dark_hype"
-    bed, bed_name = pick_song(BED_SONGS, mood, Path("clips/bed.mp3"))
-    drop, drop_name = pick_song(DROP_SONGS, mood, Path("clips/drop.mp3"))
-    beats = detect_beats(drop) if drop else {"tempo": 120.0, "beats": [], "drop": 0.0}
-    song_drop = _num(beats.get("drop"), 0.0)
-    bl = sorted(b for b in (beats.get("beats") or []) if isinstance(b, (int, float)))
-    if bl:
-        song_drop = min(bl, key=lambda b: abs(b - song_drop))
-    beats_comp = [punch_s + (b - song_drop) for b in bl if b >= song_drop]
-    if len(beats_comp) < 8:
-        iv = 60.0 / max(60.0, _num(beats.get("tempo"), 120))
-        beats_comp = [punch_s + k * iv for k in range(80)]
+    pool = list(DROP_SONGS.get(mood) or DROP_SONGS["default"])
+    random.shuffle(pool)
+    pool += [f for f in DROP_SONGS["default"] if f not in pool]
+    song = song_name = tl = None
+    snap = (ds, list(words), pidx, punch_s, punch_e)
+    for f in pool:
+        got = download_bank_song(f, Path("clips/song.mp3"))
+        if not got:
+            continue
+        ds, words, pidx, punch_s, punch_e = snap[0], list(snap[1]), snap[2], snap[3], snap[4]
+        beats = detect_beats(got)
+        bl = sorted(b for b in (beats.get("beats") or []) if isinstance(b, (int, float)))
+        if len(bl) < 16:
+            iv = 60.0 / max(60.0, _num(beats.get("tempo"), 120))
+            bl = [k * iv for k in range(int(probe_duration(got) / iv))]
+        ibi = style.median_ibi(bl)
+        # nudge the lead-in so the punch word sits a whole number of beats after the dialogue cut
+        # (then the cut into the dialogue, the drop and every montage cut are all on the beat)
+        r = punch_s % ibi
+        if r > 0.02 and words[0]["s"] - r >= 0.12:
+            shift_words(r)
+        elif r > 0.02 and words[0]["s"] + (ibi - r) <= MAX_LEAD + 0.4 and ds - (ibi - r) >= 0:
+            shift_words(-(ibi - r))
+        dlg_len = punch_e + 0.06
+        try:
+            tl = style.plan_timeline(bl, _num(beats.get("drop"), 0.0), probe_duration(got), dlg_len, punch_s)
+        except ValueError as e:
+            print("SONG", f, "does not fit:", e, flush=True)
+            continue
+        song, song_name = got, f
+        break
+    if not tl:
+        raise CandidateRejected(f"no song fits the timeline (dialogue {punch_e:.1f}s)")
+    print("TIMELINE", json.dumps({k: v for k, v in tl.items() if not k.endswith("_cuts")}),
+          f"intro {len(tl['intro_cuts'])} cuts, outro {len(tl['outro_cuts'])} cuts, song {song_name}", flush=True)
 
-    # tight transition: montage starts the moment the punch word ends (snap to a kick within 0.3s)
-    D = punch_e + 0.06
-    nxt = [b for b in beats_comp if punch_e <= b <= punch_e + 0.3]
-    if nxt:
-        D = nxt[0]
-    M = min(max(TOTAL_TARGET - D, TOTAL_MIN + 1.0 - D), TOTAL_MAX - D)
-    if D + M < TOTAL_MIN:
-        raise CandidateRejected(f"cannot fit 35-60s (dialogue {D:.1f}s)")
-    mplan = style.montage_plan_sky(beats_comp, D, M)
-    cuts = [c for c, _ in mplan]
-    print(f"MONTAGE {len(cuts)} beat cuts in {M:.1f}s ({sum(1 for _, k in mplan if k == 'hero')} hero)", flush=True)
+    # global frame grid: every boundary is quantised once so the drop stays exactly on the punch word
+    bounds, acc = [0.0], 0.0
+    for c, _ in tl["intro_cuts"]:
+        acc += c
+        bounds.append(acc)
+    bounds[-1] = tl["dialogue_start_s"]
+    bounds.append(tl["dialogue_end_s"])
+    acc = tl["dialogue_end_s"]
+    for c, _ in tl["outro_cuts"]:
+        acc += c
+        bounds.append(acc)
+    fb = [int(round(x * FPS)) for x in bounds]
+    n_in = len(tl["intro_cuts"])
+    intro_lens = [fb[i + 1] - fb[i] for i in range(n_in)]
+    intro_frames_total = fb[n_in]
+    dialogue_frames = fb[n_in + 1] - fb[n_in]
+    outro_lens = [fb[i + 1] - fb[i] for i in range(n_in + 1, len(fb) - 1)]
+    kinds = [k for _, k in tl["intro_cuts"]] + [k for _, k in tl["outro_cuts"]]
+    D = dialogue_frames / FPS
+    drop_frame = intro_frames_total + int(round(punch_s * FPS))
 
     print("[3] FFmpeg graded cuts", flush=True)
     dlg = Path("clips/dialogue.mp4")
     prep_cut(src, dlg, ds, D + 0.3, audio=True, preset="medium")
-    dialogue_frames = min(int(round(D * FPS)), int(math.floor(probe_duration(dlg) * FPS)))
-    drop_frame = int(round(punch_s * FPS))
+    if int(math.floor(probe_duration(dlg) * FPS)) < dialogue_frames:
+        raise CandidateRejected("dialogue cut shorter than planned")
 
     # montage source times: Gemini's picks outside the dialogue, then even fill
+    need = n_in + len(outro_lens)
     used_lo, used_hi = ds - 0.5, ds + D + 0.5
     picks = []
     for t in plan.get("action_cuts") or []:
@@ -440,42 +474,37 @@ def build_draft(src, info, dur, w, h, query, demo, cand):
             picks.append(t)
     k = 0
     base = list(picks)
-    while len(picks) < len(cuts) and base and k < 6:
+    while len(picks) < need and base and k < 8:
         k += 1
         for t in base:
             t2 = t + 1.1 * k
             if t2 <= ue - 1.0 and not (used_lo <= t2 <= used_hi) and all(abs(t2 - p) > 0.6 for p in picks):
                 picks.append(t2)
-    if len(picks) < len(cuts):
+    if len(picks) < need:
         span = [x * 0.5 for x in range(int(lo * 2), int((ue - 1) * 2))]
         span = [t for t in span if not (used_lo <= t <= used_hi) and all(abs(t - p) > 0.6 for p in picks)]
-        step = max(1, len(span) // max(1, len(cuts) - len(picks) + 1))
-        picks += span[step::step][: len(cuts) - len(picks)]
-    hero_idx = [i for i, (_, k) in enumerate(mplan) if k == "hero"]
-    if len(picks) >= len(cuts) and hero_idx:
-        best = picks[:len(hero_idx)]
-        rest = picks[len(hero_idx):]
-        ordered = []
-        for i in range(len(cuts)):
-            ordered.append(best.pop(0) if i in hero_idx else rest.pop(0))
-        picks = ordered
-    action_paths, action_frames, action_kinds = [], [], []
-    cursor = dialogue_frames / FPS
-    for i, (t, c) in enumerate(zip(picks, cuts)):
-        f0, f1 = int(round(cursor * FPS)), int(round((cursor + c) * FPS))
-        cursor += c
-        want = max(1, f1 - f0)
+        step = max(1, len(span) // max(1, need - len(picks) + 1))
+        picks += span[step::step][: need - len(picks)]
+    while len(picks) < need and picks:  # very short source: reuse moments (shifted) rather than fail
+        picks.append(picks[len(picks) % max(1, len(base) or 1)] + 0.4)
+    # the strongest Gemini picks open the video (intro), the rest drive the post-drop montage
+    lens = intro_lens + outro_lens
+    paths = []
+    for i, (t, want) in enumerate(zip(picks, lens)):
         ap = Path(f"clips/action_{i}.mp4")
-        prep_cut(src, ap, t, want / FPS + 0.1, audio=False, rgb=True)
-        fr = min(want, int(math.floor(probe_duration(ap) * FPS)))
-        if fr >= 1:
-            action_paths.append(ap)
-            action_frames.append(fr)
-            action_kinds.append(mplan[i][1])
-    if len(action_paths) < 15:
-        raise CandidateRejected(f"only {len(action_paths)} montage cuts")
+        ok = False
+        for tt in (t, max(lo, t - 1.5), max(0.0, lo - 3.0)):
+            prep_cut(src, ap, tt, want / FPS + 0.15, audio=False, rgb=True)
+            if ap.exists() and int(math.floor(probe_duration(ap) * FPS)) >= want:
+                ok = True
+                break
+        if not ok:
+            raise CandidateRejected(f"montage cut {i} too short at {t:.1f}s")
+        paths.append(ap)
+    if len(paths) != need or need < 12:
+        raise CandidateRejected(f"only {len(paths)}/{need} montage cuts")
 
-    total = dialogue_frames + sum(action_frames)
+    total = intro_frames_total + dialogue_frames + sum(outro_lens)
     if not (TOTAL_MIN * FPS <= total <= 60 * FPS):
         raise CandidateRejected(f"length {total / FPS:.1f}s outside 35-60s")
 
@@ -510,39 +539,37 @@ def build_draft(src, info, dur, w, h, query, demo, cand):
     for f in assets_dir.glob("*"):
         f.unlink(missing_ok=True)
     shutil.copy(dlg, assets_dir / "dialogue.mp4")
-    rel_actions = []
-    for i, ap in enumerate(action_paths):
+    rel = []
+    for i, ap in enumerate(paths):
         shutil.copy(ap, assets_dir / f"action_{i}.mp4")
-        rel_actions.append(f"assets/action_{i}.mp4")
-    # music pre-mix: loudness-normalised so the bed sits ~11 dB under the dialogue and the drop is full level
-    drop_s = drop_frame / FPS
-    bed_start = audible_start(bed) if bed else 0.0
-    if bed:
-        run(["ffmpeg", "-y", "-ss", f"{bed_start:.3f}", "-t", f"{drop_s + 0.6:.3f}", "-i", str(bed),
-             "-map", "0:a:0", "-vn", "-af", "loudnorm=I=-16:TP=-1.5:LRA=11,afade=t=in:d=0.08", "-ar", "48000", "-ac", "2",
-             "-c:a", "aac", "-b:a", "256k", str(assets_dir / "bed.m4a")])
-    if drop:
-        run(["ffmpeg", "-y", "-ss", f"{song_drop:.3f}", "-t", f"{total / FPS - drop_s + 0.6:.3f}", "-i", str(drop),
-             "-map", "0:a:0", "-vn", "-af", "loudnorm=I=-10:TP=-1.0:LRA=7", "-ar", "48000", "-ac", "2",
-             "-c:a", "aac", "-b:a", "256k", str(assets_dir / "drop.m4a")])
+        rel.append(f"assets/action_{i}.mp4")
+    # one song through the whole video (pro-edit): starts at song_start so its drop beat lands on the punch word;
+    # ducked to BED_GAIN (~-11 dB) under the dialogue in Remotion, full level in both montages
+    run(["ffmpeg", "-y", "-ss", f"{tl['song_start']:.3f}", "-t", f"{total / FPS + 0.5:.3f}", "-i", str(song),
+         "-map", "0:a:0", "-vn", "-af", "loudnorm=I=-11:TP=-1.0:LRA=9,afade=t=in:d=0.05", "-ar", "48000", "-ac", "2",
+         "-c:a", "aac", "-b:a", "256k", str(assets_dir / "music.m4a")])
     make_sfx(assets_dir)
     wm_size = captions_mod.watermark_size("RIYIO", style.W, 0.07)
 
     props = {
         "hook": hook,
         "hookQuestion": hq,
+        "introClips": rel[:n_in],
+        "introFrames": intro_lens,
         "dialogueSrc": "assets/dialogue.mp4",
+        "dialogueFrom": intro_frames_total,
         "dialogueFrames": dialogue_frames,
         "dropFrame": drop_frame,
-        "actionClips": rel_actions,
-        "actionFrames": action_frames,
-        "actionKinds": action_kinds,
+        "actionClips": rel[n_in:],
+        "actionFrames": outro_lens,
+        "actionKinds": kinds[n_in:],
+        "musicSrc": "assets/music.m4a",
         "captions": cap_events,
         "captionFont": cap_style["font"],
         "captionLook": cap_style["look"],
-        "bedSrc": "assets/bed.m4a" if bed else "",
+        "bedSrc": "",
         "bedVolume": BED_GAIN,
-        "dropSrc": "assets/drop.m4a" if drop else "",
+        "dropSrc": "",
         "hitSrc": "assets/hit.wav",
         "whooshSrc": "assets/whoosh.wav",
         "picture": pic,
@@ -553,16 +580,21 @@ def build_draft(src, info, dur, w, h, query, demo, cand):
     Path("remotion-props.json").write_text(json.dumps(props, indent=2))
     meta = {**plan, "genre": genre_of(query), "query": query, "source": info, "source_res": f"{w}x{h}",
             "letterbox_crop": LETTERBOX["crop"], "picture": pic, "window_start": round(ds, 2),
-            "first_word_s": round(words[0]["s"], 2), "punch": words[pidx]["word"], "punch_s": round(punch_s, 3),
-            "drop_s": round(drop_s, 3), "montage_start_s": round(dialogue_frames / FPS, 3),
-            "bed_song": bed_name, "bed_start_s": round(bed_start, 2), "drop_song": drop_name,
-            "song_drop_s": round(song_drop, 2), "tempo": beats.get("tempo"), "words": len(words), "language": lang,
-            "dialogue_s": round(dialogue_frames / FPS, 2), "montage_s": round(sum(action_frames) / FPS, 2),
-            "montage_cuts": len(action_frames), "total_s": round(total / FPS, 2), "captions": len(cap_events),
+            "first_word_s": round(intro_frames_total / FPS + words[0]["s"], 2), "punch": words[pidx]["word"],
+            "punch_s": round(intro_frames_total / FPS + punch_s, 3), "drop_s": round(drop_frame / FPS, 3),
+            "structure": "intro montage -> dialogue (ducked music, captions) -> drop on punch word -> montage",
+            "intro_s": round(intro_frames_total / FPS, 2), "intro_cuts": n_in,
+            "dialogue_start_s": round(intro_frames_total / FPS, 2),
+            "montage_start_s": round((intro_frames_total + dialogue_frames) / FPS, 3),
+            "song": song_name, "song_start_s": tl["song_start"], "song_drop_beat_s": tl["song_drop_beat"],
+            "beat_s": tl["ibi"], "words": len(words), "language": lang,
+            "dialogue_s": round(dialogue_frames / FPS, 2), "montage_s": round(sum(outro_lens) / FPS, 2),
+            "montage_cuts": len(outro_lens), "total_s": round(total / FPS, 2), "captions": len(cap_events),
             "caption_style": f"{cap_style['id']} {cap_style['name']}", "caption_zones": cap_info}
     Path("plan.json").write_text(json.dumps(meta, indent=2, default=str))
-    print("PLAN", json.dumps({k: meta[k] for k in ("genre", "scene", "punch", "punch_s", "drop_s", "montage_start_s",
-                                                  "first_word_s", "bed_song", "drop_song", "dialogue_s", "montage_s",
+    print("PLAN", json.dumps({k: meta[k] for k in ("genre", "scene", "punch", "punch_s", "drop_s", "intro_s",
+                                                  "dialogue_start_s", "montage_start_s", "first_word_s", "song",
+                                                  "dialogue_s", "montage_s",
                                                   "montage_cuts", "total_s", "words", "captions", "caption_style",
                                                   "hook_title", "hook_question")}, default=str), flush=True)
 
@@ -739,6 +771,7 @@ def main():
                  "whisper_words": pl.get("words"), "caption_groups": pl.get("captions"),
                  "caption_style": pl.get("caption_style"), "first_word_s": pl.get("first_word_s"),
                  "punch_word": pl.get("punch"), "punch_word_s": pl.get("punch_s"), "drop_s": pl.get("drop_s"),
+                 "intro_montage_s": pl.get("intro_s"), "dialogue_start_s": pl.get("dialogue_start_s"),
                  "montage_start_s": pl.get("montage_start_s"), "montage_cuts": pl.get("montage_cuts"),
                  "dialogue_s": pl.get("dialogue_s"), "montage_s": pl.get("montage_s"), "end_card": "none",
                  "watermark": "RIYIO inside the picture, bottom-center", "black_segments": blacks,

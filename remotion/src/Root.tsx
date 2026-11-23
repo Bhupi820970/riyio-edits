@@ -1,9 +1,9 @@
 import {Composition, CalculateMetadataFunction} from 'remotion';
 import {JuraijEdit, JuraijProps} from './JuraijEdit';
 
-// Total length = exact sum of dialogue + montage frames (no end card) (computed by run_v2.py from ffprobe).
+// Total length = exact sum of intro + dialogue + montage frames (no end card) (computed by run_v2.py from ffprobe).
 const calculateMetadata: CalculateMetadataFunction<JuraijProps> = ({props}) => {
-  const sum = (props.dialogueFrames || 0) + (props.actionFrames || []).reduce((a, b) => a + b, 0) ;
+  const sum = (props.introFrames || []).reduce((a, b) => a + b, 0) + (props.dialogueFrames || 0) + (props.actionFrames || []).reduce((a, b) => a + b, 0);
   return {durationInFrames: Math.max(1, props.durationInFrames || sum)};
 };
 
