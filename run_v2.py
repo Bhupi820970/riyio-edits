@@ -126,13 +126,15 @@ def ffmpeg_cut(src, dest, start, duration, audio=True):
 
 
 FPS = style.FPS
-MIN_WORDS = 8          # fewer words = captionless video -> reject / shift (5 for sports / games)
+MIN_WORDS = 6          # fewer words = captionless video -> reject / shift (5 for sports / games)
 MAX_LEAD = 0.9         # max seconds before the first spoken word (intro trim)
 INTRO_SKIP = 15.0      # never dialogue_start < 15s on sources longer than 60s
 MAX_QC_RETRIES = 2
 END_CARD_S = 0.0      # end card removed (BiBi, Nov 22)
-DLG_MIN, DLG_MAX = 14.0, 18.0     # phase 1 (dialogue) seconds
+# Skywalker setup (BiBi, Nov 23): short dialogue hook, most of the runtime is a beat-synced fast-cut montage.
+DLG_MIN, DLG_MAX = 5.0, 11.0      # phase 1 (dialogue hook) seconds, ends on the punch word
 TOTAL_MIN, TOTAL_MAX = 35.0, 59.0
+TOTAL_TARGET = 40.0               # ~70-85% of it is montage (music only)
 BED_GAIN = 0.28                   # ~ -11 dB under the dialogue
 BED_SONGS = {"emotional_romance": ["epic_4.mp3", "epic_7.mp3"],
              "default": ["epic_5.mp3", "epic_4.mp3", "dark_6.mp3", "dark_4.mp3"]}
@@ -292,7 +294,7 @@ def fetch_and_screen(url, info_hint, used_urls):
     print("DOWNLOADED", info.get("title"), "|", info.get("channel"), f"{w}x{h}", f"{dur:.1f}s", flush=True)
     if min(w, h) < 700:
         raise CandidateRejected(f"source too low-res {w}x{h}")
-    if dur < DLG_MIN + 15:
+    if dur < 30:
         raise CandidateRejected(f"source too short ({dur:.0f}s)")
     frames = []
     for k, frac in enumerate((0.12, 0.3, 0.5, 0.7, 0.88)):
@@ -335,7 +337,7 @@ def build_draft(src, info, dur, w, h, query, demo, cand):
     if bad_plan:  # Gemini timestamps beyond the clip (or inside the outro): find the scene by speech instead
         print(f"Gemini window {plan.get('dialogue_start')}-{plan.get('dialogue_end')}s is outside the usable "
               f"0-{ue:.0f}s -> speech scan", flush=True)
-        win = find_speech_window(src, dur, scan=min(ue - lo, 420.0), min_words=min_words)
+        win = find_speech_window(src, dur, length=DLG_MAX + 1, scan=min(ue - lo, 420.0), min_words=min_words)
         if not win:
             raise CandidateRejected("Gemini window out of range and no speech segment found")
         ds, de = win
@@ -349,13 +351,13 @@ def build_draft(src, info, dur, w, h, query, demo, cand):
         ds = max(lo, de - (DLG_MIN + 3))
     if de - ds > DLG_MAX + 2:
         ds = de - (DLG_MAX + 1)
-    if de - ds < 20:
+    if de - ds < DLG_MIN:
         raise CandidateRejected(f"dialogue window too short {ds:.1f}-{de:.1f}")
     win_len = min(ue - ds, de - ds + 1.5)
     words, lang = transcribe_window(src, ds, win_len)
     if len(words) < min_words:
         print("too few words -> shifting to highest-speech segment", flush=True)
-        win = find_speech_window(src, dur, min_words=min_words)
+        win = find_speech_window(src, dur, length=DLG_MAX + 1, min_words=min_words)
         if not win:
             raise CandidateRejected(f"no speech segment with >= {min_words} words")
         ds, de = win
@@ -413,11 +415,12 @@ def build_draft(src, info, dur, w, h, query, demo, cand):
     nxt = [b for b in beats_comp if punch_e <= b <= punch_e + 0.3]
     if nxt:
         D = nxt[0]
-    M = max(round(D * 0.22, 2), TOTAL_MIN + 1.0 - D)
-    M = min(max(M, 5.0), 14.0, TOTAL_MAX - D)
-    if M < 4.0 or D + M < TOTAL_MIN:
+    M = min(max(TOTAL_TARGET - D, TOTAL_MIN + 1.0 - D), TOTAL_MAX - D)
+    if D + M < TOTAL_MIN:
         raise CandidateRejected(f"cannot fit 35-60s (dialogue {D:.1f}s)")
-    cuts = style.montage_cuts(beats_comp, D, M)
+    mplan = style.montage_plan_sky(beats_comp, D, M)
+    cuts = [c for c, _ in mplan]
+    print(f"MONTAGE {len(cuts)} beat cuts in {M:.1f}s ({sum(1 for _, k in mplan if k == 'hero')} hero)", flush=True)
 
     print("[3] FFmpeg graded cuts", flush=True)
     dlg = Path("clips/dialogue.mp4")
@@ -448,7 +451,15 @@ def build_draft(src, info, dur, w, h, query, demo, cand):
         span = [t for t in span if not (used_lo <= t <= used_hi) and all(abs(t - p) > 0.6 for p in picks)]
         step = max(1, len(span) // max(1, len(cuts) - len(picks) + 1))
         picks += span[step::step][: len(cuts) - len(picks)]
-    action_paths, action_frames = [], []
+    hero_idx = [i for i, (_, k) in enumerate(mplan) if k == "hero"]
+    if len(picks) >= len(cuts) and hero_idx:
+        best = picks[:len(hero_idx)]
+        rest = picks[len(hero_idx):]
+        ordered = []
+        for i in range(len(cuts)):
+            ordered.append(best.pop(0) if i in hero_idx else rest.pop(0))
+        picks = ordered
+    action_paths, action_frames, action_kinds = [], [], []
     cursor = dialogue_frames / FPS
     for i, (t, c) in enumerate(zip(picks, cuts)):
         f0, f1 = int(round(cursor * FPS)), int(round((cursor + c) * FPS))
@@ -460,7 +471,8 @@ def build_draft(src, info, dur, w, h, query, demo, cand):
         if fr >= 1:
             action_paths.append(ap)
             action_frames.append(fr)
-    if len(action_paths) < 5:
+            action_kinds.append(mplan[i][1])
+    if len(action_paths) < 15:
         raise CandidateRejected(f"only {len(action_paths)} montage cuts")
 
     total = dialogue_frames + sum(action_frames)
@@ -524,6 +536,7 @@ def build_draft(src, info, dur, w, h, query, demo, cand):
         "dropFrame": drop_frame,
         "actionClips": rel_actions,
         "actionFrames": action_frames,
+        "actionKinds": action_kinds,
         "captions": cap_events,
         "captionFont": cap_style["font"],
         "captionLook": cap_style["look"],

@@ -124,6 +124,50 @@ def montage_cuts(beats_comp: list[float], start: float, length: float) -> list[f
     return cuts
 
 
+
+def montage_plan_sky(beats_comp: list[float], start: float, length: float) -> list[tuple[float, str]]:
+    """Skywalker / reference-edit montage: hard cuts on the beat grid from `start`.
+    Opens with a 4-cut flurry (1 beat each) right after the drop, then a 1-1-2 beat rhythm
+    (~0.45-1.0s cuts) with a 2-3.5s hero shot about every 9th cut (max 3). Returns (seconds, kind)."""
+    bs = sorted(b for b in beats_comp if b > start + 0.05)
+    if len(bs) > 3:
+        diffs = sorted(bs[i + 1] - bs[i] for i in range(len(bs) - 1))
+        ibi = diffs[len(diffs) // 2]
+    else:
+        ibi = 0.5
+    ibi = min(max(ibi, 0.25), 1.2)
+    unit = 1 if ibi >= 0.42 else 2                      # never shorter than ~0.42s
+    hero_beats = max(2, int(round(2.6 / ibi)))
+    while hero_beats * ibi > 3.6 and hero_beats > 2:
+        hero_beats -= 1
+    rhythm = [unit, unit, 2 * unit]
+    grid = [start] + bs
+    end = start + length
+    while grid[-1] < end + 4 * ibi:
+        grid.append(grid[-1] + ibi)
+    out, k, n, heroes = [], 0, 0, 0
+    t = start
+    while t < end - 0.3:
+        if n < 4:
+            step, kind = unit, "flurry"
+        elif n % 9 == 8 and heroes < 3:
+            step, kind = hero_beats, "hero"
+        else:
+            step, kind = rhythm[n % 3], "beat"
+        k2 = min(len(grid) - 1, k + step)
+        d = grid[k2] - t
+        if end - (t + d) < 0.35:
+            d = end - t
+        if d <= 0.05:
+            break
+        if kind == "hero":
+            heroes += 1
+        out.append((round(d, 3), kind))
+        t += d
+        k = k2
+        n += 1
+    return out
+
 def good_hook(h: str) -> bool:
     h = (h or "").strip().strip('"').strip()
     return bool(h) and h.lower().rstrip(".!?") not in BANNED_HOOKS and len(h.split()) <= 6

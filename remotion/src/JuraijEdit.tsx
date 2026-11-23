@@ -17,6 +17,7 @@ export type JuraijProps = {
   dropFrame: number;       // punch word start = beat drop
   actionClips: string[];
   actionFrames: number[];
+  actionKinds?: string[];  // flurry | beat | hero
   captions: CapEvent[];
   captionFont: 'anton' | 'playfair';
   captionLook: 'shadow' | 'glow';
@@ -44,10 +45,13 @@ if (typeof document !== 'undefined') {
 }
 const FONT = {anton: '"RiyioAnton", "Anton", Impact, sans-serif', playfair: '"RiyioPlayfair", "Playfair Display", "P052", serif'};
 
-const ActionClip: React.FC<{src: string}> = ({src}) => {
+const ActionClip: React.FC<{src: string; kind?: string}> = ({src, kind}) => {
   const frame = useCurrentFrame();
-  const zoom = interpolate(frame, [0, 10], [1.1, 1.0], {extrapolateRight: 'clamp'});
-  const flash = interpolate(frame, [0, 3], [0.6, 0], {extrapolateRight: 'clamp'});
+  // hard cuts on the beat (Skywalker style): punch-in on every cut, white flash only on hero shots
+  const zoom = kind === 'hero'
+    ? interpolate(frame, [0, 90], [1.0, 1.08], {extrapolateRight: 'clamp'})
+    : interpolate(frame, [0, 6], [1.08, 1.0], {extrapolateRight: 'clamp'});
+  const flash = kind === 'hero' ? interpolate(frame, [0, 3], [0.5, 0], {extrapolateRight: 'clamp'}) : 0;
   return (
     <AbsoluteFill>
       <OffthreadVideo src={staticFile(src)} muted style={{width: '100%', height: '100%', transform: `scale(${zoom})`}} />
@@ -125,7 +129,7 @@ export const JuraijEdit: React.FC<JuraijProps> = (p) => {
       {/* Phase 2: beat-synced montage, music only */}
       {seqs.map((s, i) => (
         <Sequence key={i} from={s.from} durationInFrames={s.len}>
-          <ActionClip src={s.src} />
+          <ActionClip src={s.src} kind={(p.actionKinds || [])[i]} />
         </Sequence>
       ))}
 

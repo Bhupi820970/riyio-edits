@@ -43,3 +43,13 @@ BiBi rules: length 35s-60s; English captions synced to lips; best quality; Gemin
 - Captions: speaker-side styles from pro-edit (caption_patterns.py P01-P15: beside the speaker, away from the face, never covering faces, Anton, black outline + hard shadow, 80%->100% pop, small white fillers, coloured key words) plus R00 = the reference serif glow look. Placement from YuNet face detection per caption; word-by-word reveal for lip sync. Styles rotate across videos, picked per mood.
 - Genres rotate: movies, web series, games (official cinematics/cutscenes), sports (F1 team radio/overtakes, football commentary), anime (English dub), cartoons/animated films. Sports/games may use English commentary/team radio as dialogue (>= 5 words).
 - Fonts are bundled in remotion/public/fonts (Anton, Playfair Display; SIL OFL).
+
+## Update (Nov 23 2026, BiBi): SAME setup as Skywalker — overrides dialogue length / structure above
+- Old videos had too much talking. Now: SHORT dialogue hook only (5-11 s, ends on the punch word), then the
+  main part (~75-85% of runtime, total ~40 s) is a beat-synced fast-cut montage, music at 0 dB, no dialogue.
+- Montage rhythm (like the Skywalker example https://youtu.be/ieltf77ofiA): 4-cut flurry on the drop, then
+  1-1-2 beat hard cuts (~0.45-1.0 s) with a 2-3.5 s hero shot about every 9th cut (max 3), punch-in per cut,
+  white flash only on hero shots. Gemini's best action picks go to the hero slots.
+- Unchanged: no logos (source order source_url -> links/queue.txt -> channels/channels.txt -> search),
+  RIYIO watermark, English, 35-60 s, 2-pass Gemini QC, outro cut.
+- Auto-post is OFF: schedule commented out in riyio-v2.yml and publishing needs repo variable RIYIO_AUTO_PUBLISH=1.

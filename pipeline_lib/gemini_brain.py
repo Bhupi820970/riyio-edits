@@ -27,7 +27,7 @@ Watch this source clip (360p preview, timestamps in seconds) and return ONLY val
   "dialogue_end": <seconds>,
   "punch_word": "<one word>",
   "punch_time": <seconds>,
-  "action_cuts": [<12-20 timestamps in seconds>],
+  "action_cuts": [<25-40 timestamps in seconds>],
   "mood": "<dark_hype|epic_cinematic|emotional_romance|cold_sigma>",
   "hook_title": "<original 2-4 word title>",
   "hook_question": "<original 3-6 word question ending with ..?>",
@@ -39,14 +39,16 @@ Rules:
   Genre notes: games = official game cinematics / cutscenes (allowed); sports = F1 team radio / onboard or
   football broadcast moments where English commentary or team radio counts as the dialogue (at least 5 words);
   anime = English dub only; cartoons = animated films / series in English.
-- Pick the single most iconic, highest-tension CONTINUOUS English dialogue exchange. The dialogue window
-  (dialogue_start..dialogue_end) must be 30-46 seconds long, start about 1 second before the first line,
-  and end right after the punch word. Never choose dialogue_start < 15.0 if the clip is longer than 60s
+- The edit is MOSTLY a fast beat-synced montage (about 75-85% of the runtime); the dialogue is only a SHORT hook.
+  Pick the single most iconic, highest-tension English line or two (a threat, a reveal, a famous quote). The
+  dialogue window (dialogue_start..dialogue_end) must be 6-11 seconds long, start about 0.5 second before the
+  first word, and end right after the punch word. Never choose dialogue_start < 15.0 if the clip is longer than 60s
   (skip YouTube intros / "Subscribe" / "Available in 4K" cards).
 - punch_word = the last impactful word of the final line (a name, threat or reveal); punch_time = the exact
   second that word is spoken. The music drop will hit on it.
-- action_cuts: 12-20 timestamps OUTSIDE the dialogue window showing the most intense visuals of the same
-  show / characters (fights, reveals, close-ups); no logos, no text on screen.
+- action_cuts: 25-40 timestamps OUTSIDE the dialogue window showing the most intense visuals of the same
+  show / characters (fights, explosions, chases, reveals, hero close-ups), best ones FIRST (the first few
+  become 2-3s hero shots); varied shots, no talking-head shots, no logos, no text on screen.
 - hook_title: an ORIGINAL 2-4 word title-style quote about THIS exact scene's theme. hook_question: an ORIGINAL
   question that makes people watch. Never reuse wording from these instructions; no cliches such as
   "Built different", "Full throttle", "She read him cold".
@@ -164,18 +166,19 @@ def analyze(video_360p: Path, genre: str = "movies") -> dict:
 
 
 QC_PROMPT = """You are a strict QC inspector for a RIYIO 4:5 cinematic short. Intended structure:
-1) Dialogue part (75-90% of runtime): one English scene (movie/series/game cutscene/anime dub/cartoon, or sports
+1) Short dialogue hook (about 5-12 seconds, at most ~30% of runtime): one English scene (movie/series/game cutscene/anime dub/cartoon, or sports
    commentary / team radio) with original dialogue, framed without crop (blurred darkened fill above/below),
    a white top banner with black title text, 1-4 word captions placed BESIDE the speaking character (not
    covering faces) and revealed word by word in sync with the speech (first caption is a hook question).
    A dark music bed is audible under the dialogue the whole time.
 2) The music drop hits exactly on the last punch word (white flash), the dialogue stops and the video cuts
-   straight into a rapid montage (0.3-0.8s cuts, 5+ cuts) of the same show, music at full level, no captions.
+   straight into the MAIN part: a long beat-synced fast-cut montage (70-85% of runtime, 25+ hard cuts of about
+   0.4-1.0s with a few 2-3.5s hero shots) of the same show, music at full level, no dialogue, no captions.
    There is NO end card. A small white "RIYIO" watermark sits inside the movie picture, bottom-center.
 Measured facts from the pipeline: {facts}
 Fail if ANY: YouTube intro / "Subscribe" / "Available in 4K" card; more than ~1s before the first spoken word;
 spoken language not English; captions missing, covering a face, or clearly out of sync with the speech;
-black frames; music not audible at some point; drop not on the punch word or dead air before the montage;
+more than ~13 seconds of talking / dialogue scene; black frames; music not audible at some point; drop not on the punch word or dead air before the montage;
 an end card; watermark missing or on the black/blurred bars; total length outside 35-60 seconds;
 ANY channel outro / end screen / "like & subscribe" graphic or promo speech ANYWHERE in the video (also mid-video),
 or captions showing words like SUBSCRIBE / CHANNEL / SUPPORT US.
