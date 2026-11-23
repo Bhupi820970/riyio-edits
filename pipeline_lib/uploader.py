@@ -96,7 +96,7 @@ def create_video_post(channel_id: str, text: str, video_url: str | None,
         input_obj["metadata"] = {
             "youtube": {
                 "title": (title or text or "RIYIO Edit")[:70],
-                "category": "Entertainment",
+                "categoryId": "24",  # Entertainment (Buffer requires categoryId)
                 "madeForKids": False,
             }
         }
@@ -128,7 +128,7 @@ def publish_via_buffer(
 ) -> dict:
     """Post the SAME 4K 9:16 vertical Shorts to YouTube, X, and Instagram.
 
-    YouTube receives title + category=Entertainment + madeForKids=false.
+    YouTube receives title + categoryId=24 (Entertainment) + madeForKids=false.
     If demo_only is True, channel list is printed but no posts are created.
     """
     token = _token()
