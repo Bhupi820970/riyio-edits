@@ -21,3 +21,7 @@
 2026-11-23 22:58 IST	rejected	https://www.youtube.com/watch?v=sQ7SMVEze3Q	error: RuntimeError("GEMINI failed: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand a
 2026-11-23 23:04 IST	rejected	https://www.youtube.com/watch?v=2Rzg9SumkPk	error: RuntimeError("GEMINI failed: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand a
 2026-11-23 23:17 IST	channel-used	https://www.youtube.com/watch?v=rOrx3x-45-c	Final Fight Scene | COLD STORAGE (2026) Movie CLIP 4K
+2026-11-23 23:46 IST	rejected	https://www.youtube.com/watch?v=fx3KqfUo_KA	error: RuntimeError("GEMINI failed: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand a
+2026-11-23 23:53 IST	rejected	https://www.youtube.com/watch?v=Ly8augDkok4	error: RuntimeError("GEMINI failed: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand a
+2026-11-23 23:58 IST	rejected	https://www.youtube.com/watch?v=Y9OXsDRfyAw	error: RuntimeError("GEMINI failed: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand a
+2026-11-24 00:26 IST	channel-used	https://www.youtube.com/watch?v=hgDp-PuLRdE	The Dentist Visit Becomes a Nightmare | Insidious: Out of the Further (4K)
