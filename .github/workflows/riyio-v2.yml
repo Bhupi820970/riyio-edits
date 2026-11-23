@@ -1,14 +1,16 @@
 name: riyio-v2
 on:
-  schedule:
-    # Same 7 daily slots as the old produce-videos workflow (UTC; IST = UTC+5:30)
-    - cron: "0 3 * * *"      # 08:30 IST
-    - cron: "0 7 * * *"      # 12:30 IST
-    - cron: "30 10 * * *"    # 16:00 IST
-    - cron: "0 13 * * *"     # 18:30 IST
-    - cron: "0 15 * * *"     # 20:30 IST
-    - cron: "0 17 * * *"     # 22:30 IST
-    - cron: "30 19 * * *"    # 01:00 IST next day
+  # AUTO-POST OFF (BiBi, Nov 23 2026): daily slots paused so no Actions minutes are used.
+  # To turn back on: uncomment the 7 crons below AND set repo variable RIYIO_AUTO_PUBLISH=1
+  # (Settings > Secrets and variables > Actions > Variables). Without that variable every run is demo-only.
+  # schedule:
+  #   - cron: "0 3 * * *"      # 08:30 IST
+  #   - cron: "0 7 * * *"      # 12:30 IST
+  #   - cron: "30 10 * * *"    # 16:00 IST
+  #   - cron: "0 13 * * *"     # 18:30 IST
+  #   - cron: "0 15 * * *"     # 20:30 IST
+  #   - cron: "0 17 * * *"     # 22:30 IST
+  #   - cron: "30 19 * * *"    # 01:00 IST next day
   workflow_dispatch:
     inputs:
       demo_only:
@@ -52,8 +54,14 @@ jobs:
         run: npm install
       - name: Resolve mode
         id: mode
+        env:
+          AUTO_PUBLISH: ${{ vars.RIYIO_AUTO_PUBLISH }}
         run: |
-          if [ "${{ github.event_name }}" = "schedule" ]; then
+          # Publishing is OFF unless repo variable RIYIO_AUTO_PUBLISH is 1/true.
+          if [ "$AUTO_PUBLISH" != "1" ] && [ "$AUTO_PUBLISH" != "true" ]; then
+            echo "RIYIO_AUTO_PUBLISH is off -> demo only, nothing is posted"
+            echo "demo_only=true" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "schedule" ]; then
             echo "demo_only=false" >> "$GITHUB_OUTPUT"
           else
             v="${{ inputs.demo_only }}"
@@ -78,6 +86,8 @@ jobs:
           BUFFER_ACCESS_TOKEN: ${{ secrets.BUFFER_ACCESS_TOKEN }}
         run: python -u run_v2.py
       - name: Publish to media-cache + Buffer
+        # skipped entirely while auto-post is off / demo runs (video stays in the riyio-final artifact)
+        if: steps.mode.outputs.demo_only == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
