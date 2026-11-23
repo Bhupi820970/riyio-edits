@@ -7,6 +7,20 @@
       "last": "2026-11-22",
       "count": 1
     },
+    "boxoffice animation ☆ movie scenes": {
+      "count": 1,
+      "channel": " Boxoffice ANIMATION ☆ Movie Scenes ",
+      "reason": "pre-screen: The frames contain a channel logo in the top left corner (letter B in a red box) and burned-in subtitles at the bottom.",
+      "example": "Tai Lung VS Master Shifu | Kung Fu Panda | CLIP 🔥 4K",
+      "last": "2026-11-23"
+    },
+    "cinematico": {
+      "count": 1,
+      "channel": "Cinematico",
+      "reason": "Gemini Pass 1 rejected: Watermark present in the top-right corner throughout the video.",
+      "example": "THE WOLF OF WALL STREET (2013) | |Sell Me the Pen\" | Recruiting his Friends Scene 4K UHD",
+      "last": "2026-11-23"
+    },
     "filmzone tv": {
       "channel": "FilmZone Tv",
       "reason": "Fan edit / compilation splicing animated film with live-action",
@@ -35,6 +49,13 @@
       "last": "2026-11-22",
       "count": 1
     },
+    "movies official": {
+      "count": 1,
+      "channel": "MOVIES OFFICIAL",
+      "reason": "pre-screen: Subtitle present in the second frame ('[crowd chanting] Professor! Professor!')",
+      "example": "Finally Professor Enter The Bank Of Spain - Money Heist Scenes (Season 5)",
+      "last": "2026-11-23"
+    },
     "otaku gaming": {
       "channel": "Otaku Gaming",
       "reason": "Channel watermark overlay in the bottom right corner",
@@ -55,6 +76,13 @@
       "example": "",
       "last": "2026-11-22",
       "count": 1
+    },
+    "seasons clips": {
+      "count": 1,
+      "channel": "Seasons Clips",
+      "reason": "pre-screen: Frames contain a website watermark 'www.BANDICAM.COM' at the top and burned-in subtitles at the bottom.",
+      "example": "Best of Professor and Tokyo  | Lisbon's not dead | Money Heist | La Casa De Papel",
+      "last": "2026-11-23"
     },
     "solo adventures gaming": {
       "channel": "Solo  Adventures Gaming",
