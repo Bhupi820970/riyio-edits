@@ -1,15 +1,8 @@
 name: produce-videos
 
+# Daily scheduled slots moved to riyio-v2.yml (run_v2.py, production publish).
+# This workflow is left in place for manual legacy runs of run_real.py only.
 on:
-  schedule:
-    # Exact 7x daily UTC crons for peak India + US IST slots
-    - cron: "0 3 * * *"
-    - cron: "0 7 * * *"
-    - cron: "30 10 * * *"
-    - cron: "0 13 * * *"
-    - cron: "0 15 * * *"
-    - cron: "0 17 * * *"
-    - cron: "30 19 * * *"
   workflow_dispatch:
     inputs:
       mode:

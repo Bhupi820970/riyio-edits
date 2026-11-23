@@ -1,8 +1,18 @@
 name: riyio-v2
 on:
+  schedule:
+    # Same 7 daily slots as the old produce-videos workflow (UTC; IST = UTC+5:30)
+    - cron: "0 3 * * *"      # 08:30 IST
+    - cron: "0 7 * * *"      # 12:30 IST
+    - cron: "30 10 * * *"    # 16:00 IST
+    - cron: "0 13 * * *"     # 18:30 IST
+    - cron: "0 15 * * *"     # 20:30 IST
+    - cron: "0 17 * * *"     # 22:30 IST
+    - cron: "30 19 * * *"    # 01:00 IST next day
   workflow_dispatch:
     inputs:
       demo_only:
+        description: "If true, render and upload to media-cache but skip Buffer/YouTube posting"
         type: boolean
         default: true
       source_url:
@@ -13,12 +23,18 @@ on:
         description: "Optional genre: movies, web_series, games, sports, anime, cartoons"
         type: string
         default: ""
+
+concurrency:
+  group: riyio-v2-publish
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
 jobs:
   edit:
     runs-on: ubuntu-latest
     timeout-minutes: 150
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
@@ -34,9 +50,22 @@ jobs:
       - name: Remotion deps
         working-directory: remotion
         run: npm install
+      - name: Resolve mode
+        id: mode
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "demo_only=false" >> "$GITHUB_OUTPUT"
+          else
+            v="${{ inputs.demo_only }}"
+            if [ "$v" = "true" ] || [ "$v" = "True" ]; then
+              echo "demo_only=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "demo_only=false" >> "$GITHUB_OUTPUT"
+            fi
+          fi
       - name: Run pipeline
         env:
-          DEMO_ONLY: ${{ inputs.demo_only }}
+          DEMO_ONLY: ${{ steps.mode.outputs.demo_only }}
           SOURCE_URL: ${{ inputs.source_url }}
           GENRE: ${{ inputs.genre }}
           REPO: ${{ github.repository }}
@@ -48,13 +77,71 @@ jobs:
           RAPIDAPI_KEY_4: ${{ secrets.RAPIDAPI_KEY_4 }}
           BUFFER_ACCESS_TOKEN: ${{ secrets.BUFFER_ACCESS_TOKEN }}
         run: python -u run_v2.py
+      - name: Publish to media-cache + Buffer
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          DEMO_ONLY: ${{ steps.mode.outputs.demo_only }}
+          BUFFER_ACCESS_TOKEN: ${{ secrets.BUFFER_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          SRC=""
+          if [ -f out.final.mp4 ]; then
+            SRC=out.final.mp4
+          elif [ -f out_remotion.mp4 ]; then
+            SRC=out_remotion.mp4
+          fi
+          if [ -z "$SRC" ]; then
+            echo "No rendered video found (out.final.mp4)"
+            exit 1
+          fi
+
+          gh release view media-cache --repo "$REPO" >/dev/null 2>&1 || \
+            gh release create media-cache --repo "$REPO" --title "RIYIO media cache" --notes "Rolling public media for Buffer" || true
+
+          TS=$(date +%s)
+          OUT="shorts_${TS}.mp4"
+          cp "$SRC" "$OUT"
+          gh release upload media-cache "$OUT" --repo "$REPO" --clobber
+
+          SHORTS_URL="https://github.com/${REPO}/releases/download/media-cache/${OUT}"
+          echo "SHORTS_URL=$SHORTS_URL"
+          export SHORTS_URL
+
+          python - << 'PY'
+          import json, os
+          from pathlib import Path
+          from pipeline_lib.uploader import publish_via_buffer
+
+          demo = os.environ.get("DEMO_ONLY", "false").lower() in ("1", "true", "yes")
+          shorts_url = os.environ.get("SHORTS_URL")
+          meta = {}
+          for name in ("meta.json", "plan.json", "remotion-props.json"):
+              p = Path(name)
+              if p.exists():
+                  try:
+                      meta.update(json.loads(p.read_text()))
+                  except Exception:
+                      pass
+          title = meta.get("title_youtube") or meta.get("hook_title") or meta.get("hook") or "RIYIO Edit"
+          caption = meta.get("caption_x") or meta.get("post_caption") or meta.get("hook") or title
+          print("DEMO_ONLY =", demo)
+          print("TITLE =", title)
+          print("CAPTION =", caption[:200])
+          result = publish_via_buffer(shorts_url, title, caption, demo_only=demo)
+          print("Buffer result:", result)
+          PY
       - name: Save learned blocklist + used links
         if: always()
         run: |
           git add config/rejected_channels.json links/used.txt
           if ! git diff --cached --quiet; then
             git -c user.name=bibi-bot -c user.email=bot@users.noreply.github.com commit -m "chore: riyio run ${{ github.run_number }} learned channels / used links"
-            for i in 1 2 3; do git pull --rebase --autostash -q origin main && git push -q origin HEAD:main && break; sleep 5; done
+            for i in 1 2 3; do
+              git pull --rebase --autostash -q origin main && git push -q origin HEAD:main && break
+              echo "push retry $i failed, waiting"
+              sleep 5
+            done
           fi
       - name: Artifact
         if: always()

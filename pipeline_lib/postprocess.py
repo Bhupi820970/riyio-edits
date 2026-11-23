@@ -1,6 +1,6 @@
 """4K 4:5 HDR grade + optional Buffer post."""
 from __future__ import annotations
-import os, subprocess
+import subprocess
 from pathlib import Path
 
 # Grade + sharpen are applied per clip before Remotion (pipeline_lib/style.py); here only a clean 4K upscale.
@@ -20,7 +20,5 @@ def upscale_hdr(src: Path, out: Path, preset: str = "slow"):
         raise RuntimeError(r.stderr[-600:])
 
 def buffer_post(video_url: str, caption: str, demo: bool):
-    if demo or not os.environ.get("BUFFER_ACCESS_TOKEN"):
-        print("skip Buffer (demo or no token)")
-        return
-    print("Buffer post:", caption[:80])
+    # media-cache upload + Buffer/YouTube posting is done by riyio-v2.yml after out.final.mp4 exists.
+    print("Buffer publish deferred to workflow (media-cache + Buffer); demo=", demo)
