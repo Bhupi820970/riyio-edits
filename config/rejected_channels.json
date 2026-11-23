@@ -7,6 +7,13 @@
       "last": "2026-11-22",
       "count": 1
     },
+    "binge society": {
+      "count": 1,
+      "channel": "Binge Society",
+      "reason": "pre-screen: The frames contain a 'Binge Society' channel logo in the top left corner and copyright text burned-in at the bottom.",
+      "example": "Gladiator (2000): My Name Is Maximus Scene",
+      "last": "2026-11-23"
+    },
     "boxoffice animation ☆ movie scenes": {
       "count": 1,
       "channel": " Boxoffice ANIMATION ☆ Movie Scenes ",
@@ -19,6 +26,13 @@
       "channel": "Cinematico",
       "reason": "Gemini Pass 1 rejected: Watermark present in the top-right corner throughout the video.",
       "example": "THE WOLF OF WALL STREET (2013) | |Sell Me the Pen\" | Recruiting his Friends Scene 4K UHD",
+      "last": "2026-11-23"
+    },
+    "fc barcelona": {
+      "count": 1,
+      "channel": "FC Barcelona",
+      "reason": "pre-screen: The Barcelona club crest/logo watermark is visible in the top right corner of all frames.",
+      "example": "FC BARCELONA 6-1 PSG | Match highlights",
       "last": "2026-11-23"
     },
     "filmzone tv": {
@@ -69,6 +83,13 @@
       "example": "",
       "last": "2026-11-22",
       "count": 1
+    },
+    "playvade": {
+      "count": 1,
+      "channel": "PLAYVADE",
+      "reason": "pre-screen: Burned-in subtitles/captions are present at the bottom of the frames.",
+      "example": "Jin Sakai Cutscene - Ghost of Yōtei | PLAYVADE | 4K Cutscenes",
+      "last": "2026-11-23"
     },
     "rotten tomatoes tv": {
       "channel": "Rotten Tomatoes TV",

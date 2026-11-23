@@ -12,3 +12,7 @@
 2026-11-23 13:43 IST	rejected	https://www.youtube.com/watch?v=wVd23XzDW20	dialogue window too short 331.0-350.0
 2026-11-23 13:54 IST	rejected	https://www.youtube.com/watch?v=6fJPYekXCWs	dialogue window too short 229.4-248.4
 2026-11-23 13:58 IST	rejected	https://www.youtube.com/watch?v=Kt9BWpPfY6c	dialogue window too short 434.0-453.0
+2026-11-23 17:21 IST	rejected	https://www.youtube.com/watch?v=Ae9B5C-fWxY	dialogue window too short 354.2-373.2
+2026-11-23 17:30 IST	rejected	https://www.youtube.com/watch?v=wx528g-sLQ0	Gemini Pass 1 rejected: Non-English dubbed audio present in clip.
+2026-11-23 17:32 IST	rejected	https://www.youtube.com/watch?v=kCw7asATv9U	dialogue window too short 321.3-340.3
+2026-11-23 17:37 IST	rejected	https://www.youtube.com/watch?v=E7C3YBcLPrI	dialogue window too short 279.7-298.7
