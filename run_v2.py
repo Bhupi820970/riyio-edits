@@ -14,6 +14,8 @@ from pipeline_lib import style
 from pipeline_lib import captions as captions_mod
 from pipeline_lib import channel_blocklist, link_queue, channel_source
 from pipeline_lib import montage_select as msel
+from pipeline_lib import song_mood as SM
+from pipeline_lib import shot_library as SL
 
 # Rotating famous-scene bank by GENRE: iconic ENGLISH dialogue (anime = English dub; sports/games may use
 # English commentary / team radio / cutscene dialogue). GENRE env forces a genre, QUERY env forces a query.
@@ -139,8 +141,7 @@ TOTAL_MIN, TOTAL_MAX = style.TIMELINE_MIN_S, style.TIMELINE_MAX_S
 BED_GAIN = 0.28                   # ~ -11 dB under the dialogue
 BED_SONGS = {"emotional_romance": ["epic_4.mp3", "epic_7.mp3"],
              "default": ["epic_5.mp3", "epic_4.mp3", "dark_6.mp3", "dark_4.mp3"]}
-DROP_SONGS = {"emotional_romance": ["epic_2.mp3", "aggressive_2.mp3"],
-              "default": ["aggressive_2.mp3", "aggressive_3.mp3", "aggressive_1.mp3", "dark_3.mp3", "dark_1.mp3"]}
+MAX_SONG_TRIES = 8                # songs (mood-allowed, tempo-ranked) tried until one fits the timeline
 
 
 class CandidateRejected(RuntimeError):
@@ -313,6 +314,9 @@ def fetch_and_screen(url, info_hint, used_urls):
     return src, info, dur, w, h
 
 
+SHOT_LIB = SL.load()
+
+
 TITLE_RE = re.compile(r"\|\s*([^|]+?)\s*\((?:19|20)\d\d\)")
 MAX_EXTRA = 2
 
@@ -333,6 +337,32 @@ def fetch_extra_sources(info, plan, context, used_urls):
         print("EXTRA: no title to search for", flush=True)
         return
     main_id = link_queue._vid(info.get("url", "")) if info.get("url") else ""
+    got = 0
+    tried = 0
+    # 1) shot library: known-good sources of this title from earlier videos (already logo-screened and
+    #    shot-picked -> no search / channel listing / Gemini shot pass, only the download)
+    for ls in SL.sources_for(SHOT_LIB, key, exclude_ids={main_id}, exclude_urls=used_urls)[:MAX_EXTRA]:
+        if got >= MAX_EXTRA or tried >= 4:
+            return
+        tried += 1
+        used_urls.add(ls["url"])
+        xpath = Path(f"clips/extra_{got + 1}.mp4")
+        xpath.unlink(missing_ok=True)
+        print(f"=== EXTRA SOURCE (shot library) try {tried}: {ls.get('title', '')[:80]} | {len(ls['shots'])} shots",
+              flush=True)
+        xi = download_url(ls["url"], xpath)
+        if not xi:
+            print("EXTRA (library) rejected: no download", flush=True)
+            continue
+        xi = {**xi, "title": ls.get("title", ""), "channel": ls.get("channel", ""), "url": ls["url"], "library": True}
+        xd = probe_duration(xpath)
+        xw, xh = probe_video(xpath)
+        if min(xw, xh) < 700 or xd < 20:
+            print(f"EXTRA (library) rejected: {xw}x{xh} {xd:.0f}s", flush=True)
+            continue
+        got += 1
+        yield xpath, detect_letterbox(xpath, xd, xw, xh), xi, SL.as_gemini_shots(ls["shots"])
+    # 2) trusted channels, then 3) search
     cands = []
     for cu in channel_source.channel_urls():
         try:
@@ -345,8 +375,6 @@ def fetch_extra_sources(info, plan, context, used_urls):
         cands += sorted(same, key=lambda v: -(v["views"] or 0))[:3]
     qs = [q for q in (plan.get("related_queries") or []) if isinstance(q, str)][:2] or \
          [f"{key} official trailer", f"{key} best scenes 4K"]
-    got = 0
-    tried = 0
     for q in [None] + qs:
         if got >= MAX_EXTRA or tried >= 4:
             break
@@ -484,9 +512,13 @@ def build_draft(src, info, dur, w, h, query, demo, cand, used_urls=None):
 
     # ---- pro-edit timeline: intro montage -> dialogue (music ducked) -> drop on the punch word -> montage ----
     mood = plan.get("mood") or "dark_hype"
-    pool = list(DROP_SONGS.get(mood) or DROP_SONGS["default"])
-    random.shuffle(pool)
-    pool += [f for f in DROP_SONGS["default"] if f not in pool]
+    # song by mood (idea 3): scene mood (comedy / dark / epic / emotional / hype) + cached BPM tags
+    smood = SM.scene_mood(plan)
+    catalog = SM.load_catalog()
+    cat_mood = {x.get("file"): x.get("mood") for x in catalog}
+    tags = SM.load_tags()
+    pool = SM.rank_songs(smood, catalog, tags)[:MAX_SONG_TRIES]
+    print(f"SONG POOL scene_mood={smood}:", pool, flush=True)
     song = song_name = tl = None
     snap = (ds, list(words), pidx, punch_s, punch_e)
     for f in pool:
@@ -495,6 +527,12 @@ def build_draft(src, info, dur, w, h, query, demo, cand, used_urls=None):
             continue
         ds, words, pidx, punch_s, punch_e = snap[0], list(snap[1]), snap[2], snap[3], snap[4]
         beats = detect_beats(got)
+        if not (tags.get(f) or {}).get("bpm"):      # tag once, cached in config/song_tags.json (committed back)
+            tags[f] = SM.tag_entry(cat_mood.get(f) or "", _num(beats.get("tempo"), 0), None, beats.get("drop"))
+            SM.save_tags(tags)
+        if SM.tempo_fit(tags[f].get("bpm") or 0, smood) > 30:
+            print("SONG", f, "tempo", tags[f].get("bpm"), f"off for {smood} -> next", flush=True)
+            continue
         bl = sorted(b for b in (beats.get("beats") or []) if isinstance(b, (int, float)))
         if len(bl) < 16:
             iv = 60.0 / max(60.0, _num(beats.get("tempo"), 120))
@@ -516,7 +554,7 @@ def build_draft(src, info, dur, w, h, query, demo, cand, used_urls=None):
         song, song_name = got, f
         break
     if not tl:
-        raise CandidateRejected(f"no song fits the timeline (dialogue {punch_e:.1f}s)")
+        raise CandidateRejected(f"no {smood} song fits the timeline (dialogue {punch_e:.1f}s)")
     print("TIMELINE", json.dumps({k: v for k, v in tl.items() if not k.endswith("_cuts")}),
           f"intro {len(tl['intro_cuts'])} cuts, outro {len(tl['outro_cuts'])} cuts, song {song_name}", flush=True)
 
@@ -553,6 +591,7 @@ def build_draft(src, info, dur, w, h, query, demo, cand, used_urls=None):
     outro_s = [f / FPS for f in outro_lens]
     used_urls = used_urls if used_urls is not None else set()
     sources = {"main": (src, LETTERBOX["crop"])}
+    src_ids = {"main": (link_queue._vid(info.get("url", "")) if info.get("url") else "", info)}
     chunks = msel.inventory(src, "main", lo, ue, crop=LETTERBOX["crop"], blocked=[(ds, ds + D)])
     gshots = [x for x in (plan.get("montage_shots") or []) if isinstance(x, dict)]
     if msel.lazy_times([x.get("t") for x in gshots]):
@@ -562,9 +601,14 @@ def build_draft(src, info, dur, w, h, query, demo, cand, used_urls=None):
         gshots = [{"t": t, "energy": 5, "kind": "action", "reason": "director action cut"}
                   for t in plan.get("action_cuts") or [] if isinstance(t, (int, float))]
     msel.apply_gemini(chunks, gshots, "main")
+    main_id = link_queue._vid(info.get("url", "")) if info.get("url") else ""
+    lib_main = [x for x in SL.sources_for(SHOT_LIB, title_key(info, plan)) if x["id"] == main_id]
+    if lib_main:   # this source was used before: its saved good shots count too
+        print(f"SHOT LIBRARY: {msel.apply_gemini(chunks, SL.as_gemini_shots(lib_main[0]['shots']), 'main')} "
+              "main chunks boosted from earlier picks", flush=True)
     min_len = min(intro_s + outro_s)
     pool = msel.unique_pool(chunks, min_len)
-    strong = [c for c in pool if c.energy >= 5 or c.motion >= 12]
+    strong = [c for c in pool if c.energy >= 5 or c.motion >= 12 or c.loud >= 7]
     print(f"MONTAGE main: {len(chunks)} chunks, {len(pool)} unique looks, {len(strong)} strong, need {need}; "
           f"director says sufficient={plan.get('montage_sufficient')}", flush=True)
     extras_used = []
@@ -578,13 +622,14 @@ def build_draft(src, info, dur, w, h, query, demo, cand, used_urls=None):
             xc = msel.inventory(xpath, sid, min(3.0, xd * 0.05), usable_end(xd), crop=xcrop)
             msel.apply_gemini(xc, xshots, sid)
             # an extra source only contributes the shots Gemini judged relevant (or clearly moving)
-            xc = [c for c in xc if c.energy >= 4 or c.motion >= 14]
+            xc = [c for c in xc if c.energy >= 4 or c.motion >= 14 or c.loud >= 7]
             chunks += xc
             sources[sid] = (xpath, xcrop)
+            src_ids[sid] = (link_queue._vid(xinfo.get("url", "")), xinfo)
             extras_used.append({"id": sid, "title": xinfo.get("title", ""), "channel": xinfo.get("channel", ""),
                                 "url": xinfo.get("url", ""), "chunks": len(xc)})
             pool = msel.unique_pool(chunks, min_len)
-            strong = [c for c in pool if c.energy >= 5 or c.motion >= 12]
+            strong = [c for c in pool if c.energy >= 5 or c.motion >= 12 or c.loud >= 7]
             print(f"MONTAGE +{sid}: {len(xc)} relevant chunks -> {len(pool)} unique, {len(strong)} strong", flush=True)
             if len(pool) >= need and len(strong) >= int(0.6 * need):
                 break
@@ -595,14 +640,22 @@ def build_draft(src, info, dur, w, h, query, demo, cand, used_urls=None):
     bad = msel.audit(picks)
     if bad:
         raise CandidateRejected("montage audit: " + "; ".join(bad[:3]))
-    print("MONTAGE picks:", json.dumps([{k: p[k] for k in ("src", "start", "dur", "role", "energy", "kind")}
+    print("MONTAGE picks:", json.dumps([{k: p[k] for k in ("src", "start", "dur", "role", "energy", "loud", "kind", "hit")}
                                         for p in picks]), flush=True)
+    # shot library (idea 5): save the good shots of every source used, keyed by title (committed back)
+    lib_title = title_key(info, plan)
+    for sid, (vid, sinfo) in src_ids.items():
+        n_saved = SL.add(SHOT_LIB, lib_title, vid, sinfo, [c for c in chunks if c.src == sid])
+        if n_saved:
+            print(f"SHOT LIBRARY '{SL.key(lib_title)}' {vid}: {n_saved} shots saved", flush=True)
+    SL.save(SHOT_LIB)
     lens = intro_lens + outro_lens
     paths = []
     for i, (pk, want) in enumerate(zip(picks, lens)):
         ap = Path(f"clips/action_{i}.mp4")
         xpath, xcrop = sources[pk["src"]]
-        prep_cut(xpath, ap, pk["start"], want / FPS + 0.15, audio=False, rgb=True, crop=xcrop)
+        # light colour split only on the hit cuts (drop + hero shots), like ref1/ref2
+        prep_cut(xpath, ap, pk["start"], want / FPS + 0.15, audio=False, rgb=bool(pk.get("hit")), crop=xcrop)
         if not ap.exists() or int(math.floor(probe_duration(ap) * FPS)) < want:
             raise CandidateRejected(f"montage cut {i} too short at {pk['src']}@{pk['start']:.1f}s")
         paths.append(ap)
@@ -632,10 +685,9 @@ def build_draft(src, info, dur, w, h, query, demo, cand, used_urls=None):
     hook = (plan.get("hook_title") or plan.get("hook") or "").strip().strip('"')
     if not style.good_hook(hook):
         hook = " ".join((plan.get("scene") or info.get("title") or "The Moment").split()[:3])
-    hq = (plan.get("hook_question") or "").strip().strip('"')
-    if not style.good_hook(hq):
-        hq = "WHAT WOULD YOU DO..?"
-    plan.update({"hook_title": hook, "hook_question": hq})
+    # no opening question / hook caption any more (BiBi, Nov 24): stripped from the plan, never rendered
+    style.strip_intro_question(plan)
+    plan.update({"hook_title": hook})
     if not plan.get("post_caption"):
         plan["post_caption"] = f"Clip: {info.get('title','')} | Credit: {info.get('channel','')} | Edited under Fair Use."
 
@@ -654,11 +706,15 @@ def build_draft(src, info, dur, w, h, query, demo, cand, used_urls=None):
          "-map", "0:a:0", "-vn", "-af", "loudnorm=I=-11:TP=-1.0:LRA=9,afade=t=in:d=0.05", "-ar", "48000", "-ac", "2",
          "-c:a", "aac", "-b:a", "256k", str(assets_dir / "music.m4a")])
     make_sfx(assets_dir)
-    wm_size = captions_mod.watermark_size("RIYIO", style.W, 0.07)
+    wm_size = captions_mod.watermark_size("RIYIO", style.W, style.WM_FRAC)
+    # hit SFX on the strongest cuts (drop + hero shots), whoosh just before each hero cut (self-made SFX)
+    cut_starts = [sum(intro_lens[:i]) for i in range(n_in)] + \
+        [intro_frames_total + dialogue_frames + sum(outro_lens[:j]) for j in range(len(outro_lens))]
+    hit_frames = sorted({drop_frame} | {cut_starts[i] for i, pk in enumerate(picks) if pk.get("hit") and i > n_in})  # slot n_in = drop
+    whoosh_frames = [max(0, f - 6) for f in hit_frames if f != drop_frame]
 
     props = {
         "hook": hook,
-        "hookQuestion": hq,
         "introClips": rel[:n_in],
         "introFrames": intro_lens,
         "dialogueSrc": "assets/dialogue.mp4",
@@ -677,6 +733,9 @@ def build_draft(src, info, dur, w, h, query, demo, cand, used_urls=None):
         "dropSrc": "",
         "hitSrc": "assets/hit.wav",
         "whooshSrc": "assets/whoosh.wav",
+        "hitFrames": hit_frames,
+        "whooshFrames": whoosh_frames,
+        "wmOpacity": style.WM_OPACITY,
         "picture": pic,
         "wmSize": wm_size,
         "durationInFrames": total,
@@ -692,8 +751,11 @@ def build_draft(src, info, dur, w, h, query, demo, cand, used_urls=None):
             "dialogue_start_s": round(intro_frames_total / FPS, 2),
             "montage_start_s": round((intro_frames_total + dialogue_frames) / FPS, 3),
             "montage_sources": 1 + len(extras_used), "extra_sources": extras_used,
-            "montage_picks": [{k: p[k] for k in ("src", "start", "dur", "role", "energy", "kind", "reason")} for p in picks],
+            "montage_picks": [{k: p[k] for k in ("src", "start", "dur", "role", "energy", "loud", "motion", "kind", "hit",
+                                                 "reason")} for p in picks],
             "montage_repeats": len(msel.audit(picks)),
+            "scene_mood": smood, "song_mood": cat_mood.get(song_name), "song_bpm": (tags.get(song_name) or {}).get("bpm"),
+            "hit_cuts": len(hit_frames), "intro_caption": "none", "fps_out": 60,
             "song": song_name, "song_start_s": tl["song_start"], "song_drop_beat_s": tl["song_drop_beat"],
             "beat_s": tl["ibi"], "words": len(words), "language": lang,
             "dialogue_s": round(dialogue_frames / FPS, 2), "montage_s": round(sum(outro_lens) / FPS, 2),
@@ -704,7 +766,7 @@ def build_draft(src, info, dur, w, h, query, demo, cand, used_urls=None):
                                                   "dialogue_start_s", "montage_start_s", "first_word_s", "song",
                                                   "dialogue_s", "montage_s",
                                                   "montage_cuts", "total_s", "words", "captions", "caption_style",
-                                                  "hook_title", "hook_question")}, default=str), flush=True)
+                                                  "hook_title", "scene_mood", "song_bpm", "hit_cuts")}, default=str), flush=True)
 
     print("[5] Remotion render (draft)", flush=True)
     draft = Path("out_remotion.mp4")
@@ -884,7 +946,9 @@ def main():
                  "dialogue_s": pl.get("dialogue_s"), "montage_s": pl.get("montage_s"), "end_card": "none",
                  "montage_unique_shots": len(pl.get("montage_picks") or []), "montage_sources": pl.get("montage_sources"),
                  "montage_repeats_found": pl.get("montage_repeats"),
-                 "watermark": "RIYIO inside the picture, bottom-center", "black_segments": blacks,
+                 "watermark": f"small faint glass RIYIO ({style.WM_OPACITY:.0%} opacity) inside the picture, bottom-center",
+                 "intro_caption": "none (no opening question caption)", "scene_mood": pl.get("scene_mood"),
+                 "song_mood": pl.get("song_mood"), "hit_cuts": pl.get("hit_cuts"), "black_segments": blacks,
                  "silent_segments": silences}
         print("QC FACTS", json.dumps(facts), flush=True)
         qc360 = Path("draft360.mp4")
@@ -924,9 +988,9 @@ def main():
 
     if draft != Path("out_remotion.mp4"):
         shutil.copy(draft, "out_remotion.mp4")
-    print("[7] 4K upscale 2160x2700", flush=True)
+    print("[7] 60 fps smoothing + 4K upscale 2160x2700", flush=True)
     final = Path("out.final.mp4")
-    upscale_hdr(draft, final, preset="slow")
+    upscale_hdr(draft, final, preset="medium", fps60=True)   # 60 fps smoothing, then 4K
     print("FINAL", final.stat().st_size, "dur", probe_duration(final), flush=True)
     buffer_post("", ctx["props"]["post_caption"], demo)
 

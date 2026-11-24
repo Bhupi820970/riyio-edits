@@ -16,7 +16,15 @@ BANNED_HOOKS = {"she read him cold", "money really talks", "built different", "f
 GRADE = ("eq=contrast=1.25:saturation=0.62:brightness=-0.035:gamma=0.95,"
          "colorbalance=rs=-0.05:gs=0.0:bs=0.08:rh=0.02:bh=-0.02,"
          "curves=master='0/0 0.08/0.02 0.5/0.48 1/1',"
-         "unsharp=5:5:1.0:5:5:0.0,noise=alls=4:allf=t")
+         "unsharp=5:5:1.0:5:5:0.0,noise=alls=7:allf=t")   # light moving film grain like ref1/ref2
+
+# Reference look (idea 4): light colour split only on the hit cuts (drop + hero shots), first ~0.12 s.
+RGB_SPLIT = "rgbashift=rh=-4:bh=4:rv=1:bv=-1:enable='lt(t,0.12)'"
+# RIYIO watermark (BiBi, Nov 24): about half the old size (0.07 of the frame width) and glass-like.
+WM_FRAC = 0.035
+WM_OPACITY = 0.3
+# Opening hook / question captions ("WHAT DO YOU THINK..?") are removed for good (BiBi, Nov 24).
+INTRO_QUESTION_KEYS = ("hook_question", "hookQuestion", "question", "intro_caption", "opening_caption")
 
 
 def frame_filter(rgb_split: bool = False, crop: str = "") -> str:
@@ -28,7 +36,7 @@ def frame_filter(rgb_split: bool = False, crop: str = "") -> str:
           f"[b]scale={W}:{H}:force_original_aspect_ratio=decrease:flags=lanczos[fg];"
           f"[bg][fg]overlay=(W-w)/2:(H-h)/2,{GRADE}")
     if rgb_split:
-        fc += ",rgbashift=rh=-7:bh=7:enable='lt(t,0.1)'"
+        fc += "," + RGB_SPLIT
     fc += f",fps={FPS},setsar=1,format=yuv420p[v]"
     return fc
 
@@ -255,3 +263,10 @@ def parse_cropdetect(stderr: str, src_w: int, src_h: int) -> str:
     if w < src_w * 0.9 or h < src_h * 0.5 or h > src_h * 0.96:
         return ""  # not a clean letterbox -> keep the full frame (never crop the picture)
     return f"{w}:{h}:{x}:{y}"
+
+
+def strip_intro_question(plan: dict) -> dict:
+    """Remove every opening question / hook caption the director might still return (never rendered)."""
+    for k in INTRO_QUESTION_KEYS:
+        plan.pop(k, None)
+    return plan

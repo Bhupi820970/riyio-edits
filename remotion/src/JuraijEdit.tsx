@@ -10,8 +10,7 @@ type CapEvent = {start: number; end: number; x: number; y: number; w: number; h:
   align: 'left' | 'right' | 'center'; zone: string; punch: boolean; lines: CapLine[]};
 type Rect = {x: number; y: number; w: number; h: number};
 export type JuraijProps = {
-  hook: string;            // white top banner title (whole video)
-  hookQuestion: string;    // first caption at 0s
+  hook: string;            // white top banner title (whole video). No opening question caption (removed Nov 24).
   // pro-edit timeline: intro montage -> dialogue (music ducked) -> drop on the punch word -> montage
   introClips?: string[];   // opening beat-cut montage, music at full level
   introFrames?: number[];
@@ -31,8 +30,11 @@ export type JuraijProps = {
   dropSrc: string;
   hitSrc: string;
   whooshSrc: string;
+  hitFrames?: number[];    // hit SFX on the strongest cuts (drop + hero shots)
+  whooshFrames?: number[]; // whoosh just before each hero cut
   picture: Rect;           // movie picture inside the 4:5 frame
   wmSize: number;
+  wmOpacity?: number;      // glass-like RIYIO mark (~0.3)
   durationInFrames: number;
 };
 
@@ -101,7 +103,6 @@ const Caption: React.FC<{ev: CapEvent; t: number; frame: number; fps: number; fo
 export const JuraijEdit: React.FC<JuraijProps> = (p) => {
   const frame = useCurrentFrame();
   const {fps, durationInFrames} = useVideoConfig();
-  const t = frame / fps;
   const DF = p.dialogueFrom || 0;
   const D = p.dialogueFrames;
   const font = FONT[p.captionFont] || FONT.anton;
@@ -125,9 +126,7 @@ export const JuraijEdit: React.FC<JuraijProps> = (p) => {
   const inDialogue = frame >= DF && frame < DF + D;
   const tRel = (frame - DF) / fps;   // caption times are relative to the dialogue clip
 
-  // hook question = first caption over the opening montage (pro-edit hook)
-  const hqEnd = DF > 0 ? Math.min(1.6, DF / fps) : Math.min(1.0, Math.max(0.5, p.captions.length ? p.captions[0].start : 1));
-  const showHQ = t < hqEnd && !!p.hookQuestion;
+  // captions only during the dialogue (no opening question / hook caption over the intro)
   const cap = inDialogue ? p.captions.find((c) => tRel >= c.start && tRel < c.end) : undefined;
 
   return (
@@ -167,23 +166,17 @@ export const JuraijEdit: React.FC<JuraijProps> = (p) => {
         </span>
       </div>
 
-      {/* Hook question (first caption) */}
-      {showHQ && (
-        <div style={{position: 'absolute', left: 60, right: 60, top: pic.y + pic.h * 0.5 - 50, textAlign: 'center', zIndex: 25,
-          fontFamily: font, fontSize: 64, fontWeight: 800, color: '#fff', lineHeight: 1.05,
-          WebkitTextStroke: p.captionLook === 'glow' ? undefined : '2px #000', paintOrder: 'stroke fill',
-          textShadow: p.captionLook === 'glow' ? '0 0 15px #F43F5E, 0 4px 10px #000' : '4px 4px 0 rgba(0,0,0,0.92)'}}>
-          {p.hookQuestion.toUpperCase()}
-        </div>
-      )}
-
       {/* Word-synced, speaker-side captions (phase 1 only) */}
-      {cap && !showHQ ? <Caption ev={cap} t={tRel} frame={frame - DF} fps={fps} font={font} look={p.captionLook} /> : null}
+      {cap ? <Caption ev={cap} t={tRel} frame={frame - DF} fps={fps} font={font} look={p.captionLook} /> : null}
 
-      {/* RIYIO watermark INSIDE the picture: small bold condensed sans, white ~65%, bottom-center (VICE CARTEL look) */}
-      <div style={{position: 'absolute', left: pic.x, width: pic.w, top: pic.y + pic.h - pic.h * 0.055 - p.wmSize,
+      {/* RIYIO watermark INSIDE the picture, bottom-center: small and glass-like (very transparent white,
+          thin bright edge + soft glow, no hard shadow) so it reads but never pulls the eye */}
+      <div style={{position: 'absolute', left: pic.x, width: pic.w, top: pic.y + pic.h - pic.h * 0.05 - p.wmSize,
         height: p.wmSize * 1.2, textAlign: 'center', zIndex: 18, fontFamily: FONT.anton, fontSize: p.wmSize,
-        lineHeight: 1.2, letterSpacing: 1, color: 'rgba(255,255,255,0.65)', textShadow: '1px 2px 3px rgba(0,0,0,0.25)'}}>
+        lineHeight: 1.2, letterSpacing: Math.max(1, Math.round(p.wmSize * 0.12)),
+        color: `rgba(255,255,255,${p.wmOpacity ?? 0.3})`,
+        WebkitTextStroke: `0.5px rgba(255,255,255,${Math.min(0.5, (p.wmOpacity ?? 0.3) * 0.7)})`,
+        textShadow: `0 0 ${Math.max(3, Math.round(p.wmSize * 0.3))}px rgba(255,255,255,0.14), 0 1px 2px rgba(0,0,0,0.12)`}}>
         RIYIO
       </div>
 
@@ -211,13 +204,14 @@ export const JuraijEdit: React.FC<JuraijProps> = (p) => {
             volume={(f) => interpolate(f + p.dropFrame, [durationInFrames - 6, durationInFrames], [1, 0.6], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'})} />
         </Sequence>
       ) : null}
-      {p.hitSrc ? (
-        <Sequence from={p.dropFrame} durationInFrames={21}>
-          <Audio src={staticFile(p.hitSrc)} volume={0.9} />
+      {/* hit SFX on the drop + hero cuts (strongest shots), whoosh into each hero cut */}
+      {p.hitSrc ? (p.hitFrames && p.hitFrames.length ? p.hitFrames : [p.dropFrame]).map((f, i) => (
+        <Sequence key={`h${i}`} from={f} durationInFrames={21}>
+          <Audio src={staticFile(p.hitSrc)} volume={f === p.dropFrame ? 0.9 : 0.55} />
         </Sequence>
-      ) : null}
-      {p.whooshSrc ? seqs.filter((_, i) => i % 3 === 2).map((s, i) => (
-        <Sequence key={`w${i}`} from={Math.max(0, s.from - 6)} durationInFrames={14}>
+      )) : null}
+      {p.whooshSrc ? (p.whooshFrames || []).map((f, i) => (
+        <Sequence key={`w${i}`} from={Math.max(0, f)} durationInFrames={14}>
           <Audio src={staticFile(p.whooshSrc)} volume={0.35} />
         </Sequence>
       )) : null}

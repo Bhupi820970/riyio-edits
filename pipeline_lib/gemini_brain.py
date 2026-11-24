@@ -34,8 +34,8 @@ Watch this source clip (360p preview, timestamps in seconds) and return ONLY val
   "montage_sufficient": <bool>,
   "related_queries": ["<YouTube search for more footage of the SAME title/characters>", "<another>"],
   "mood": "<dark_hype|epic_cinematic|emotional_romance|cold_sigma>",
+  "scene_mood": "<comedy|dark|epic|emotional|hype>",
   "hook_title": "<original 2-4 word title>",
-  "hook_question": "<original 3-6 word question ending with ..?>",
   "post_caption": "<caption with credit: show name | channel | Edited under Fair Use>"
 }
 Rules:
@@ -61,9 +61,12 @@ Rules:
 - montage_sufficient = false if this clip alone does not have ~25 different strong shots (e.g. a long dinner-table
   or office conversation with few angles); the pipeline then downloads 1-2 more clips of the same title
   (related_queries: official trailer, other famous scenes of the same characters).
-- hook_title: an ORIGINAL 2-4 word title-style quote about THIS exact scene's theme. hook_question: an ORIGINAL
-  question that makes people watch. Never reuse wording from these instructions; no cliches such as
-  "Built different", "Full throttle", "She read him cold".
+- scene_mood = the feel of THIS dialogue scene: comedy (funny / banter), dark (threat, villain, tension),
+  epic (heroic, grand, war), emotional (sad, love, goodbye), hype (swagger, sports, fast action). The song is
+  picked from it, so a comedy scene never gets a sad song.
+- hook_title: an ORIGINAL 2-4 word title-style quote about THIS exact scene's theme (top banner only).
+  Never reuse wording from these instructions; no cliches such as "Built different", "Full throttle",
+  "She read him cold". There is NO opening question / hook caption: never write one.
 '''
 
 
@@ -179,7 +182,8 @@ def analyze(video_360p: Path, genre: str = "movies") -> dict:
 
 QC_PROMPT = """You are a strict QC inspector for a RIYIO 4:5 cinematic short (Vice Cartel / pro-edit structure):
 1) Intro (about 6-12 seconds): a beat-synced montage of action shots from the scene's show (hard cuts on the beat,
-   about 0.4-1.0s each), music at full level, white top banner with black title text, a short hook question caption.
+   about 0.4-1.0s each), music at full level, white top banner with black title text and NO caption at all
+   (no question / hook text such as "WHAT DO YOU THINK..?" over the intro).
 2) Middle: one continuous English dialogue scene (movie/series/game cutscene/anime dub/cartoon, or sports
    commentary / team radio), about 8-18 seconds, framed without crop (blurred darkened fill above/below), 1-4 word
    captions placed BESIDE the speaking character (not covering faces), revealed word by word in sync with the
@@ -188,17 +192,19 @@ QC_PROMPT = """You are a strict QC inspector for a RIYIO 4:5 cinematic short (Vi
    cuts straight into a fast beat-synced montage (0.4-1.0s hard cuts) of the same show, music at full level,
    no dialogue, no captions, until the end. Both montages must look like a pro fan edit: many VARIED shots
    (action, reactions, wide, close-ups, hero moments) of the same title / characters with a vibe that matches the
-   dialogue, rising energy after the drop, and NO shot shown twice. There is NO end card. A small white "RIYIO" watermark sits inside the
-   movie picture, bottom-center.
+   dialogue, rising energy after the drop, and NO shot shown twice. There is NO end card. A small, faint,
+   glass-like (very transparent) "RIYIO" watermark sits inside the movie picture, bottom-center.
+   Look: light film grain, a tiny colour split + hit sound on the strongest cuts, the strongest shot on the drop.
 Measured facts from the pipeline: {facts}
 Fail if ANY: YouTube intro / "Subscribe" / "Available in 4K" card; dead air / no spoken word within ~1.2s after
 the dialogue scene starts; audible speech / dialogue inside the intro or the final montage;
-spoken language not English; captions missing, covering a face, or clearly out of sync with the speech;
+spoken language not English; any question / hook caption over the opening montage (captions belong only to
+the dialogue); captions missing, covering a face, or clearly out of sync with the speech;
 more than ~20 seconds of talking / dialogue scene; black frames; music not audible at some point; drop not on the punch word or dead air before the montage;
 a montage that repeats a shot / near-identical framing, is mostly one static setting or talking heads, looks like
 one continuous clip, or whose shots have nothing to do with the dialogue's title, characters or mood;
 captions too big (covering much of the picture) or too small to read;
-an end card; watermark missing or on the black/blurred bars; total length outside 35-60 seconds;
+an end card; watermark missing, big / bold / opaque, or on the black/blurred bars; any logo other than RIYIO; total length outside 35-60 seconds;
 ANY channel outro / end screen / "like & subscribe" graphic or promo speech ANYWHERE in the video (also mid-video),
 or captions showing words like SUBSCRIBE / CHANNEL / SUPPORT US.
 Return ONLY JSON:

@@ -5,7 +5,10 @@ inventory():  one cheap ffmpeg pass per source (4 fps, 32x18 grey) -> camera sho
 select():     pure + unit-tested. Every chunk is used at most once, no two picks overlap (or sit closer than
               MIN_GAP s) in the same source, near-identical frames (dHash distance <= HASH_DUP) are never used
               twice, the dialogue window is blocked, and the picks are ordered with intent:
-              intro = build-up in story order, post-drop = strongest shots with rising energy, best shot last.
+              intro = build-up in story order; post-drop = the STRONGEST shot right on the drop (punch word),
+              the next strongest on the hero cuts (the longer beat cuts), rising energy, 2nd best as the finale.
+Energy by sound (idea 2): every chunk also gets `loud` (0-10) from the source's own audio RMS peaks, so gunshots,
+              impacts and roars count as strong shots together with frame-difference motion and Gemini energy.
 """
 from __future__ import annotations
 
@@ -33,6 +36,7 @@ class Chunk:
     kind: str = ""
     reason: str = ""
     shot: int = 0              # camera-shot index inside its source
+    loud: float = 0.0          # 0-10 audio RMS peak of the source under this chunk (energy by sound)
     extra: dict = field(default_factory=dict)
 
     @property
@@ -40,7 +44,45 @@ class Chunk:
         return self.e - self.s
 
     def score(self) -> float:
-        return 2.0 * self.energy + min(self.motion, 40.0) / 8.0
+        return 2.0 * self.energy + min(self.motion, 40.0) / 8.0 + LOUD_W * min(self.loud, 10.0)
+
+
+LOUD_W = 0.4           # weight of the sound energy (0-10 -> up to +4, like motion's up to +5)
+AUDIO_SR = 8000
+
+
+def read_audio(path, start: float, end: float, sr: int = AUDIO_SR) -> np.ndarray:
+    """Mono float samples of the source audio (cheap 8 kHz ffmpeg pass); empty if the source has no audio."""
+    cmd = ["ffmpeg", "-v", "error", "-ss", f"{start:.2f}", "-t", f"{max(0.5, end - start):.2f}", "-i", str(path),
+           "-vn", "-ac", "1", "-ar", str(sr), "-f", "s16le", "-"]
+    raw = subprocess.run(cmd, capture_output=True).stdout
+    return np.frombuffer(raw[: len(raw) // 2 * 2], np.int16).astype(np.float32) / 32768.0
+
+
+def loudness_scores(samples: np.ndarray, sr: int, t0: float, spans: list[tuple[float, float]],
+                    win: float = 0.1) -> list[float]:
+    """Pure: 0-10 loudness per span = the 90th-percentile 100 ms RMS inside the span, scaled against the
+    whole source (10 = as loud as the source's loudest moments, 0 = silence)."""
+    if samples is None or len(samples) < sr * win * 2:
+        return [0.0] * len(spans)
+    n = int(sr * win)
+    k = len(samples) // n
+    rms = np.sqrt(np.mean(samples[: k * n].reshape(k, n) ** 2, axis=1) + 1e-12)
+    lo, hi = float(np.percentile(rms, 10)), float(np.percentile(rms, 99))
+    if hi - lo < 1e-6:
+        return [0.0] * len(spans)
+    out = []
+    for s, e in spans:
+        a, b = max(0, int((s - t0) / win)), min(k, max(int((s - t0) / win) + 1, int((e - t0) / win)))
+        seg = rms[a:b]
+        v = float(np.percentile(seg, 90)) if len(seg) else lo
+        out.append(round(float(np.clip((v - lo) / (hi - lo), 0.0, 1.0)) * 10.0, 2))
+    return out
+
+
+def apply_loudness(chunks: list["Chunk"], samples: np.ndarray, sr: int, t0: float) -> None:
+    for c, v in zip(chunks, loudness_scores(samples, sr, t0, [(c.s, c.e) for c in chunks])):
+        c.loud = v
 
 
 def hamming(a: int, b: int) -> int:
@@ -101,7 +143,12 @@ def chunks_from_frames(frames: np.ndarray, t0: float, fps: int, src: str,
 def inventory(path, src: str, lo: float, hi: float, crop: str = "",
               blocked: list[tuple[float, float]] | None = None, fps: int = 4) -> list[Chunk]:
     frames = read_gray(path, lo, hi, fps=fps, crop=crop)
-    return chunks_from_frames(frames, lo, fps, src, blocked)
+    chunks = chunks_from_frames(frames, lo, fps, src, blocked)
+    try:
+        apply_loudness(chunks, read_audio(path, lo, hi), AUDIO_SR, lo)
+    except Exception as e:  # no audio track / ffmpeg hiccup: motion + Gemini energy still rank the shots
+        print("sound energy skipped:", repr(e)[:120], flush=True)
+    return chunks
 
 
 def apply_gemini(chunks: list[Chunk], shots: list[dict], src: str) -> int:
@@ -174,29 +221,42 @@ def select(chunks: list[Chunk], intro_lens: list[float], outro_lens: list[float]
             chosen.append(c)
     if len(chosen) < need:
         raise NotEnough(len(chosen), need)
-    # story order: intro = calmer build-up (lower energy) in source order; outro = payoff, rising, best last
+    # story order: intro = calmer build-up (lower energy) in source order; outro = payoff with the strongest
+    # shot ON the drop, the next strongest on the hero cuts, rising energy in between, 2nd best as the finale
     ranked = sorted(chosen, key=lambda c: c.score())
     intro = sorted(ranked[: len(intro_lens)], key=lambda c: (c.src, c.s))
-    outro = ranked[len(intro_lens):]
-    if len(outro) >= 3:                       # drop hit = 2nd best, finale = best, rising in between
-        best, second = outro[-1], outro[-2]
-        outro = [second] + outro[:-2] + [best]
+    outro_ranked = ranked[len(intro_lens):]
+    heroes = hero_slots(list(outro_lens))
+    outro = arrange_outro(outro_ranked, len(outro_lens), heroes)
     order = intro + outro
+    n_in = len(intro_lens)
+    protected = {n_in} | {n_in + h for h in heroes}
     # fit lengths: a slot longer than its chunk swaps with a later chunk that is long enough
     for i, L in enumerate(lens):
         if order[i].length + 1e-6 >= L:
             continue
-        j = next((j for j in range(len(order)) if j != i and order[j].length + 1e-6 >= L
+        j = next((j for j in range(len(order)) if j != i and j not in protected and order[j].length + 1e-6 >= L
                   and order[i].length + 1e-6 >= lens[j]), None)
         if j is not None:
             order[i], order[j] = order[j], order[i]
     # never two cuts in a row from the same camera shot / neighbouring seconds of one source
     for i in range(1, len(order)):
         a, b = order[i - 1], order[i]
+        if i == n_in:                          # the dialogue sits between the intro and the drop
+            continue
+        if i in protected:                     # keep the strong shot on its slot, move the neighbour instead
+            if a.src == b.src and (a.shot == b.shot or abs(a.s - b.s) < 3.0) and (i - 1) not in protected:
+                for j in range(i + 1, len(order)):
+                    c = order[j]
+                    if j not in protected and not (c.src == b.src and (c.shot == b.shot or abs(c.s - b.s) < 3.0)) \
+                            and c.length + 1e-6 >= lens[i - 1] and a.length + 1e-6 >= lens[j]:
+                        order[i - 1], order[j] = order[j], order[i - 1]
+                        break
+            continue
         if a.src == b.src and (a.shot == b.shot or abs(a.s - b.s) < 3.0):
             for j in range(i + 1, len(order)):
                 c = order[j]
-                if not (c.src == a.src and (c.shot == a.shot or abs(c.s - a.s) < 3.0)) \
+                if j not in protected and not (c.src == a.src and (c.shot == a.shot or abs(c.s - a.s) < 3.0)) \
                         and c.length + 1e-6 >= lens[i] and b.length + 1e-6 >= lens[j]:
                     order[i], order[j] = order[j], order[i]
                     break
@@ -210,8 +270,39 @@ def select(chunks: list[Chunk], intro_lens: list[float], outro_lens: list[float]
         used.append((c.src, start, start + L))
         picks.append({"src": c.src, "start": round(start, 3), "dur": round(L, 3),
                       "role": "intro" if i < len(intro_lens) else "montage", "energy": c.energy, "kind": c.kind,
-                      "reason": c.reason, "hash": c.hash, "shot": c.shot})
+                      "reason": c.reason, "hash": c.hash, "shot": c.shot, "loud": c.loud,
+                      "motion": round(c.motion, 2), "score": round(c.score(), 2),
+                      "hit": i in protected})       # drop + hero cuts get the hit SFX / RGB split
     return picks
+
+
+def hero_slots(outro_lens: list[float], frac: float = 6.0) -> list[int]:
+    """Pure: outro slot indices (not the drop slot 0, not the finale) of the hero cuts = the longest beat cuts
+    (the 2-beat holds of the END pattern), about one in six cuts, at least 2, earliest first on ties."""
+    n = len(outro_lens)
+    if n < 4:
+        return []
+    k = max(2, int(round(n / frac)))
+    idx = sorted(range(1, n - 1), key=lambda i: (-outro_lens[i], i))[:k]
+    return sorted(idx)
+
+
+def arrange_outro(ranked_low_to_high: list[Chunk], n: int, heroes: list[int]) -> list[Chunk]:
+    """Pure: slot 0 (drop / punch word) = strongest, hero slots = next strongest (in time order), finale = the
+    best of the rest, all other slots rising in energy."""
+    best_first = list(reversed(ranked_low_to_high[:n]))
+    if n < 3:
+        return best_first
+    out: list[Chunk | None] = [None] * n
+    out[0] = best_first.pop(0)
+    for h in heroes:
+        out[h] = best_first.pop(0)
+    out[n - 1] = best_first.pop(0)
+    rest = sorted(best_first, key=lambda c: c.score())
+    for i in range(n):
+        if out[i] is None:
+            out[i] = rest.pop(0)
+    return out  # type: ignore[return-value]
 
 
 def audit(picks: list[dict], gap: float = MIN_GAP, dup: int = HASH_DUP) -> list[str]:

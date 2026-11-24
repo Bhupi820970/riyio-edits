@@ -18,7 +18,7 @@ BiBi rules: length 35s-60s; English captions synced to lips; best quality; Gemin
 - Serif font (Playfair Display / Garamond / Times bold look), mostly UPPERCASE, some italic sentence-case lines ("Okay..", "A little too perfect..").
 - Pop-in spring: scale 1.2 to 1.0 over about 6 frames.
 - Base white. Each caption group gets one accent color with matching glow (text-shadow ~15px): red, orange, pink, green, blue, yellow; the color rotates per line. Impact words sometimes use a transparent fill with red stroke ("WHAT", "MONEY"). Name or punch words get bigger and shake.
-- First caption is a hook question at 0s (e.g. "WHAT MOTIVATES YOU..?").
+- NO opening question / hook caption (removed Nov 24 2026): captions appear only during the dialogue.
 
 ## Look
 - Grade: contrast ~1.25, saturation ~0.6, brightness ~0.9, teal/blue shadows (ref2 cold winter look), crushed blacks; film grain in darks.
@@ -29,7 +29,7 @@ BiBi rules: length 35s-60s; English captions synced to lips; best quality; Gemin
 - Total length 35-60s (target 40-55s). Phase 1 dialogue = ~75-90% of runtime.
 - English-only scenes (whisper language='en'; non-English is rejected).
 - Best quality: 1080p+ sources preferred, CRF ~16-18, sharpen + grade, final 4:5 upscale to 2160x2700.
-- Gemini director picks the scene, exact timestamps, punch word, hook title and hook question (original per scene, never copied from prompt examples).
+- Gemini director picks the scene, exact timestamps, punch word, hook title and scene_mood (original per scene, never copied from prompt examples).
 - No crop of the 16:9 source: blurred darkened fill top/bottom; white top hook banner with black bold title for the whole video.
 - Montage: same show/character, 0.3-0.8s cuts on kicks, flash + zoom punch + slight RGB split + whoosh/hit SFX (self-generated only), no captions; end card glow "MADE BY RIYIO" + small RIYIO watermark.
 - Reference videos are not committed (kept on the box at /workspace/riyio-ref/).
@@ -56,7 +56,7 @@ Reference: https://youtu.be/ieltf77ofiA (made by pro-edit vicestyle.py, song ~12
 | end | 52.0-52.5 s | cut to black, music off |
 
 riyio (one source clip) uses the same shape with ONE middle dialogue:
-- intro montage ~6-12 s (pro-edit hook_pat 2-2-2-1-1-2 beats), song full level, hook question caption on top.
+- intro montage ~6-12 s (pro-edit hook_pat 2-2-2-1-1-2 beats), song full level, no caption over it.
 - dialogue 8-18 s in the middle, pro-edit speaker-side captions (P01-P15 + R00 glow), song ducked to ~-11 dB.
 - the song's drop beat lands exactly on the punch word (white flash + hit), dialogue stops, then a fast montage
   (4-cut flurry, then pro-edit end_pat 1-1-2-1 beats) with the song at full level to the end. Total ~42 s (35-59).
@@ -84,3 +84,17 @@ riyio (one source clip) uses the same shape with ONE middle dialogue:
 - Captions: sized to the frame width like the refs (keys 52-96 px, fillers 34-60, punch up to 112), bigger for 1-2
   words, shrunk to the free space beside the speaker.
 - Slow songs (beats > 0.75 s apart, librosa half-time) are subdivided so cuts land on 0.4-1.0 s.
+
+
+## Nov 24 2026 update (BiBi)
+- RIYIO watermark: half the old size (3.5% of the frame width, ~19 px at 1080) and glass-like: white at ~30% opacity,
+  thin bright edge and a soft glow, no hard shadow. Still the only mark in the video.
+- No opening question caption, ever (stripped from the Gemini plan, Remotion has no slot for it).
+- Energy by sound: montage shots are scored by Gemini energy + frame motion + the source's own audio RMS peaks;
+  the strongest shot lands on the drop (punch word), the next strongest on the hero cuts (longer beat holds).
+- Song by mood: Gemini scene_mood (comedy/dark/epic/emotional/hype) -> only allowed song moods (no emotional song on a
+  comedy scene), tempo-ranked from cached BPM tags (config/song_tags.json, scripts/tag_songs.py).
+- Reference look: light film grain, light RGB split + hit SFX only on the drop / hero cuts, whoosh into hero cuts,
+  60 fps output (motion-interpolated with scene-cut detection, falls back to frame doubling).
+- Shot library: config/shot_library.json keeps the good shots per title (source id, timestamps, energy, type, hash);
+  later videos of that title download those known-good sources first (fewer RapidAPI calls). No repeats per video.

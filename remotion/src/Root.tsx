@@ -19,7 +19,6 @@ export const RemotionRoot: React.FC = () => {
       height={1350}
       defaultProps={{
         hook: "",
-        hookQuestion: "",
         dialogueSrc: "",
         dialogueFrames: 0,
         dropFrame: 0,
@@ -32,7 +31,10 @@ export const RemotionRoot: React.FC = () => {
         bedVolume: 0.28,
         dropSrc: "",
         picture: {x: 0, y: 0, w: 1080, h: 1350},
-        wmSize: 40,
+        wmSize: 20,
+        wmOpacity: 0.3,
+        hitFrames: [],
+        whooshFrames: [],
         hitSrc: "",
         whooshSrc: "",
         durationInFrames: 0,

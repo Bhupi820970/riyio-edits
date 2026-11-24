@@ -106,7 +106,53 @@ def test_story_order_and_rising_energy():
     def sc(p):
         return max(v for (s, a), v in score.items() if s == p["src"] and a - 0.01 <= p["start"] <= a + 2.5)
     assert max(sc(p) for p in intro) <= max(sc(p) for p in outro)
-    assert sc(outro[-1]) == max(sc(p) for p in picks)       # best shot is the finale
+    assert sc(outro[0]) == max(sc(p) for p in picks)        # strongest shot sits ON the drop (punch word)
+
+
+def test_hero_cuts_get_next_strongest_and_are_marked_hits():
+    rng = random.Random(9)
+    ch = _chunks("main", 60, rng)
+    picks = M.select(ch, LENS_I, LENS_O)
+    outro = picks[len(LENS_I):]
+    heroes = M.hero_slots(LENS_O)
+    assert heroes and 0 not in heroes and len(LENS_O) - 1 not in heroes
+    assert all(LENS_O[h] == max(LENS_O[1:-1]) for h in heroes)          # hero = the longer beat holds
+    hit_idx = [i for i, p in enumerate(outro) if p["hit"]]
+    assert hit_idx == [0] + heroes
+    assert not any(p["hit"] for p in picks[:len(LENS_I)])
+    others = [p["score"] for i, p in enumerate(outro) if not p["hit"]]
+    assert min(p["score"] for p in outro if p["hit"]) >= max(others) - 1e-6   # hits = the strongest shots
+    assert M.audit(picks) == []
+
+
+def test_arrange_outro_pure():
+    cs = [M.Chunk("main", i * 5.0, i * 5.0 + 2, i, energy=float(i)) for i in range(10)]
+    out = M.arrange_outro(cs, 10, [3, 6])
+    e = [c.energy for c in out]
+    assert e[0] == 9 and e[3] == 8 and e[6] == 7 and e[-1] == 6
+    rest = [x for i, x in enumerate(e) if i not in (0, 3, 6, 9)]
+    assert rest == sorted(rest)                                          # rising in between
+
+
+def test_loudness_scores_peak_vs_quiet():
+    sr = 8000
+    t = np.arange(sr * 10) / sr
+    sig = 0.02 * np.sin(2 * np.pi * 220 * t)
+    sig[sr * 6: sr * 7] = 0.8 * np.sin(2 * np.pi * 110 * t[sr * 6: sr * 7])   # explosion at 6-7 s
+    sc = M.loudness_scores(sig.astype(np.float32), sr, 100.0, [(101.0, 103.0), (105.8, 107.2), (108.0, 109.5)])
+    assert sc[1] >= 9.0 and sc[0] <= 2.0 and sc[2] <= 2.0
+    assert M.loudness_scores(np.zeros(10, np.float32), sr, 0.0, [(0, 1)]) == [0.0]
+
+
+def test_loud_shot_wins_on_the_drop():
+    rng = random.Random(10)
+    ch = _chunks("main", 50, rng, energy=5.0)
+    for c in ch:
+        c.motion = 10.0
+    ch[17].loud = 10.0                           # the gunshot / impact moment
+    picks = M.select(ch, LENS_I, LENS_O)
+    drop = picks[len(LENS_I)]
+    assert abs(drop["start"] - ch[17].s) < 1.0 and drop["loud"] == 10.0
 
 
 def test_no_back_to_back_same_shot():

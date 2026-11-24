@@ -71,8 +71,12 @@ jobs:
               echo "demo_only=false" >> "$GITHUB_OUTPUT"
             fi
           fi
-      - name: Unit tests (timeline, montage, captions)
-        run: python tests/test_timeline.py && python tests/test_montage.py && python tests/test_captions.py
+      - name: Unit tests (all tests/test_*.py)
+        run: for f in tests/test_*.py; do echo "== $f"; python "$f" || exit 1; done
+      - name: Tag songs once (BPM + mood, cached in config/song_tags.json)
+        env:
+          REPO: ${{ github.repository }}
+        run: timeout 1200 python -u scripts/tag_songs.py || echo "song tagging skipped (cache stays as is)"
       - name: Run pipeline
         env:
           DEMO_ONLY: ${{ steps.mode.outputs.demo_only }}
@@ -146,9 +150,9 @@ jobs:
       - name: Save learned blocklist + used links
         if: always()
         run: |
-          git add config/rejected_channels.json links/used.txt
+          git add config/rejected_channels.json links/used.txt config/song_tags.json config/shot_library.json
           if ! git diff --cached --quiet; then
-            git -c user.name=bibi-bot -c user.email=bot@users.noreply.github.com commit -m "chore: riyio run ${{ github.run_number }} learned channels / used links"
+            git -c user.name=bibi-bot -c user.email=bot@users.noreply.github.com commit -m "chore: riyio run ${{ github.run_number }} learned channels / used links / song tags / shot library"
             for i in 1 2 3; do
               git pull --rebase --autostash -q origin main && git push -q origin HEAD:main && break
               echo "push retry $i failed, waiting"
