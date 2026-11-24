@@ -1,1 +1,194 @@
-{}
+{
+ "aggressive_1.mp3": {
+  "mood": "aggressive",
+  "bpm": 161.5,
+  "rms": 0.3631,
+  "drop_s": 90.91
+ },
+ "aggressive_2.mp3": {
+  "mood": "aggressive",
+  "bpm": 172.3,
+  "rms": 0.3245,
+  "drop_s": 98.85
+ },
+ "aggressive_3.mp3": {
+  "mood": "aggressive",
+  "bpm": 129.2,
+  "rms": 0.3188,
+  "drop_s": 53.82
+ },
+ "dark_1.mp3": {
+  "mood": "dark",
+  "bpm": 161.5,
+  "rms": 0.2793,
+  "drop_s": 105.58
+ },
+ "dark_10.mp3": {
+  "mood": "dark",
+  "bpm": 86.1,
+  "rms": 0.2201,
+  "drop_s": 125.18
+ },
+ "dark_2.mp3": {
+  "mood": "dark",
+  "bpm": 143.6,
+  "rms": 0.1916,
+  "drop_s": 195.51
+ },
+ "dark_3.mp3": {
+  "mood": "dark",
+  "bpm": 86.1,
+  "rms": 0.2414,
+  "drop_s": 105.35
+ },
+ "dark_4.mp3": {
+  "mood": "dark",
+  "bpm": 129.2,
+  "rms": 0.3063,
+  "drop_s": 132.68
+ },
+ "dark_5.mp3": {
+  "mood": "dark",
+  "bpm": 129.2,
+  "rms": 0.2761,
+  "drop_s": 157.85
+ },
+ "dark_6.mp3": {
+  "mood": "dark",
+  "bpm": 112.3,
+  "rms": 0.3414,
+  "drop_s": 212.63
+ },
+ "dark_7.mp3": {
+  "mood": "dark",
+  "bpm": 123.0,
+  "rms": 0.2826,
+  "drop_s": 173.13
+ },
+ "dark_8.mp3": {
+  "mood": "dark",
+  "bpm": 80.7,
+  "rms": 0.2278,
+  "drop_s": 93.39
+ },
+ "dark_9.mp3": {
+  "mood": "dark",
+  "bpm": 117.5,
+  "rms": 0.1311,
+  "drop_s": 162.45
+ },
+ "emotional_10.mp3": {
+  "mood": "emotional",
+  "bpm": 129.2,
+  "rms": 0.1948,
+  "drop_s": 148.86
+ },
+ "emotional_2.mp3": {
+  "mood": "emotional",
+  "bpm": 143.6,
+  "rms": 0.2536,
+  "drop_s": 168.99
+ },
+ "emotional_3.mp3": {
+  "mood": "emotional",
+  "bpm": 95.7,
+  "rms": 0.1561,
+  "drop_s": 110.06
+ },
+ "emotional_4.mp3": {
+  "mood": "emotional",
+  "bpm": 123.0,
+  "rms": 0.1015,
+  "drop_s": 114.99
+ },
+ "emotional_5.mp3": {
+  "mood": "emotional",
+  "bpm": 112.3,
+  "rms": 0.1727,
+  "drop_s": 219.71
+ },
+ "emotional_6.mp3": {
+  "mood": "emotional",
+  "bpm": 172.3,
+  "rms": 0.1829,
+  "drop_s": 58.54
+ },
+ "emotional_7.mp3": {
+  "mood": "emotional",
+  "bpm": 161.5,
+  "rms": 0.1449,
+  "drop_s": 93.6
+ },
+ "emotional_8.mp3": {
+  "mood": "emotional",
+  "bpm": 103.4,
+  "rms": 0.195,
+  "drop_s": 104.58
+ },
+ "emotional_9.mp3": {
+  "mood": "emotional",
+  "bpm": 129.2,
+  "rms": 0.123,
+  "drop_s": 71.68
+ },
+ "epic_1.mp3": {
+  "mood": "epic",
+  "bpm": 99.4,
+  "rms": 0.2001,
+  "drop_s": 217.69
+ },
+ "epic_10.mp3": {
+  "mood": "epic",
+  "bpm": 80.7,
+  "rms": 0.2284,
+  "drop_s": 118.0
+ },
+ "epic_2.mp3": {
+  "mood": "epic",
+  "bpm": 123.0,
+  "rms": 0.1869,
+  "drop_s": 192.93
+ },
+ "epic_3.mp3": {
+  "mood": "epic",
+  "bpm": 123.0,
+  "rms": 0.1238,
+  "drop_s": 116.03
+ },
+ "epic_4.mp3": {
+  "mood": "epic",
+  "bpm": 129.2,
+  "rms": 0.1087,
+  "drop_s": 53.85
+ },
+ "epic_5.mp3": {
+  "mood": "epic",
+  "bpm": 123.0,
+  "rms": 0.0878,
+  "drop_s": 248.11
+ },
+ "epic_6.mp3": {
+  "mood": "epic",
+  "bpm": 107.7,
+  "rms": 0.0637,
+  "drop_s": 392.84
+ },
+ "epic_7.mp3": {
+  "mood": "epic",
+  "bpm": 172.3,
+  "rms": 0.1964,
+  "drop_s": 204.57
+ },
+ "epic_8.mp3": {
+  "mood": "epic",
+  "bpm": 136.0,
+  "rms": 0.0666,
+  "drop_s": 122.11
+ },
+ "epic_9.mp3": {
+  "mood": "epic",
+  "bpm": 152.0,
+  "rms": 0.2235,
+  "drop_s": 114.68
+ }
+}

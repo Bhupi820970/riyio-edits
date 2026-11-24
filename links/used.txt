@@ -28,3 +28,5 @@
 2026-11-24 08:53 IST	rejected	https://www.youtube.com/watch?v=sNDm97povTE	Gemini Pass 1 rejected: The video is a compilation of multiple disconnected movie scenes.
 2026-11-24 09:12 IST	rejected	https://www.youtube.com/watch?v=GJlv6EIk668	not enough distinct montage shots (only 22 unique montage shots for 34 cuts) even with 0 extra source(s)
 2026-11-24 09:21 IST	channel-used	https://www.youtube.com/watch?v=RkYgdYMy8qk	Final Fight Scene | GOOD LUCK, HAVE FUN, DON’T DIE (2026) Movie CLIP 4K
+2026-11-24 17:08 IST	rejected	https://www.youtube.com/watch?v=vahku8_57gI	Gemini Pass 1 rejected: The video is an AI-generated fan edit / concept movie trailer.
+2026-11-24 17:23 IST	channel-used	https://www.youtube.com/watch?v=SFlBXx8QTt4	The Ultimate Price of Rebellion | The Hunger Games: Mockingjay – Part 1 (4K)
