@@ -27,6 +27,8 @@ Watch this source clip (360p preview, timestamps in seconds) and return ONLY val
   "dialogue_end": <seconds>,
   "punch_word": "<one word>",
   "punch_time": <seconds>,
+  "dialogue_quote": "<the exact words the characters SAY inside dialogue_start..dialogue_end, verbatim>",
+  "song_vocal_spans": [[<start s>, <end s>]],
   "title": "<movie / show / game name only, e.g. Meet the Parents>",
   "characters": ["<main characters in the dialogue>"],
   "montage_shots": [{"t": <seconds>, "energy": <1-10>, "kind": "<action|reaction|wide|close|hero|reveal>",
@@ -50,6 +52,12 @@ Rules:
   The dialogue window (dialogue_start..dialogue_end) must be 10-18 seconds long, start about 0.5 second before
   the first word, and end right after the punch word. Never choose dialogue_start < 15.0 if the clip is longer than 60s
   (skip YouTube intros / "Subscribe" / "Available in 4K" cards).
+- The dialogue must be SPOKEN lines by on-screen characters (talking), never singing, a song with lyrics,
+  chanting, a choir or a narrator over music. song_vocal_spans = EVERY time range in the clip where sung vocals /
+  a song with lyrics can be heard (soundtrack or characters singing), [] if none; the dialogue window must not
+  overlap them. dialogue_quote = what the characters actually say in the window (it is checked against the
+  transcript, so never paraphrase). reject=true if the clip has no clean spoken English exchange of 5+ words
+  outside sung parts.
 - punch_word = the last impactful word of the final line (a name, threat or reveal); punch_time = the exact
   second that word is spoken. The music drop will hit on it.
 - montage_shots: 25-40 DIFFERENT camera shots OUTSIDE the dialogue window, like a pro fan edit: many VARIED
@@ -186,8 +194,8 @@ QC_PROMPT = """You are a strict QC inspector for a RIYIO 4:5 cinematic short (Vi
    (no question / hook text such as "WHAT DO YOU THINK..?" over the intro).
 2) Middle: one continuous English dialogue scene (movie/series/game cutscene/anime dub/cartoon, or sports
    commentary / team radio), about 8-18 seconds, framed without crop (blurred darkened fill above/below), 1-4 word
-   captions placed BESIDE the speaking character (not covering faces), revealed word by word in sync with the
-   speech. The same song keeps playing under it, ducked (quieter) but audible the whole time.
+   captions (serif, white with a coloured glow) centred around the speaking character's chin / chest, revealed
+   word by word in sync with the speech. Captions show ONLY what a character says out loud. The same song keeps playing under it, ducked (quieter) but audible the whole time.
 3) The beat drops exactly on the character's last punch word (white flash), the dialogue stops and the video
    cuts straight into a fast beat-synced montage (0.4-1.0s hard cuts) of the same show, music at full level,
    no dialogue, no captions, until the end. Both montages must look like a pro fan edit: many VARIED shots
@@ -198,7 +206,8 @@ QC_PROMPT = """You are a strict QC inspector for a RIYIO 4:5 cinematic short (Vi
 Measured facts from the pipeline: {facts}
 Fail if ANY: YouTube intro / "Subscribe" / "Available in 4K" card; dead air / no spoken word within ~1.2s after
 the dialogue scene starts; audible speech / dialogue inside the intro or the final montage;
-spoken language not English; any question / hook caption over the opening montage (captions belong only to
+spoken language not English; caption text that is song lyrics / sung words or does not match what the
+on-screen character says (compare with caption_text in the facts and the audio); any question / hook caption over the opening montage (captions belong only to
 the dialogue); captions missing, covering a face, or clearly out of sync with the speech;
 more than ~20 seconds of talking / dialogue scene; black frames; music not audible at some point; drop not on the punch word or dead air before the montage;
 a montage that repeats a shot / near-identical framing, is mostly one static setting or talking heads, looks like
@@ -209,7 +218,10 @@ an end card; watermark missing, big / bold / opaque, or on the black/blurred bar
 ANY channel outro / end screen / "like & subscribe" graphic or promo speech ANYWHERE in the video (also mid-video),
 or captions showing words like SUBSCRIBE / CHANNEL / SUPPORT US.
 Return ONLY JSON:
-{{"pass": true, "issues": [], "trim_start": 0.0, "trim_end": 0.0, "retry_new_clip": false}}
+{{"pass": true, "issues": [], "trim_start": 0.0, "trim_end": 0.0, "retry_new_clip": false,
+  "captions_match_dialogue": true, "captions_are_lyrics": false}}
+captions_match_dialogue = the caption words are what a character says on screen; captions_are_lyrics = they are
+words of a song / singing instead.
 trim_start / trim_end = seconds to cut from the start / end only if a problem sits at an edge.
 retry_new_clip = true if the source clip itself is unusable."""
 
@@ -238,6 +250,12 @@ def pick_shots(video_360p: Path, context: dict) -> dict:
         return {"same_story": False, "reject": True, "reject_reason": "gemini shot pass failed"}
 
 
+def _flag(v, default: bool) -> bool:
+    if v is None:
+        return default
+    return v.strip().lower() == "true" if isinstance(v, str) else bool(v)
+
+
 def qc_inspect(video_360p: Path, facts: dict | None = None) -> dict:
     """Pass 2: inspect rendered draft (360p). qc_error is set only if Gemini is unreachable."""
     if not available():
@@ -247,9 +265,17 @@ def qc_inspect(video_360p: Path, facts: dict | None = None) -> dict:
     except Exception as e:
         return {"pass": False, "issues": [str(e)[:300]], "qc_error": str(e)[:300]}
     p = data.get("pass")
+    ok = (p.lower() == "true") if isinstance(p, str) else bool(p)
+    issues = list(data.get("issues") or [])
+    lyr, match = _flag(data.get("captions_are_lyrics"), False), _flag(data.get("captions_match_dialogue"), True)
+    if lyr or not match:
+        ok = False
+        issues.append("captions are song lyrics, not the character's dialogue" if lyr
+                      else "captions do not match what the character says")
     return {
-        "pass": (p.lower() == "true") if isinstance(p, str) else bool(p),
-        "issues": list(data.get("issues") or []),
+        "pass": ok,
+        "issues": issues,
+        "captions_lyrics": lyr or not match,
         "trim_start": float(data.get("trim_start") or 0.0),
         "trim_end": float(data.get("trim_end") or 0.0),
         "retry_new_clip": bool(data.get("retry_new_clip")),

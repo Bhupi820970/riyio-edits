@@ -28,7 +28,7 @@ can could should there here what who how why when where if then than all some ki
 RED, ORANGE, PINK, GREEN, BLUE, YELLOW = (244, 63, 94), (251, 146, 60), (244, 114, 182), (52, 211, 153), (56, 189, 248), (250, 204, 21)
 R00 = {"id": "R00", "name": "RIYIO reference glow (serif)", "y": [0.0], "gap": 0.9, "nudge": 0.0, "words": 4,
        "key": .060, "key_long": .052, "filler": .044, "keys": [RED, ORANGE, PINK, GREEN, BLUE, YELLOW],
-       "no_face_y": .55, "classic": False, "font": "playfair", "look": "glow"}
+       "no_face_y": .55, "classic": False, "font": "playfair", "look": "glow", "place": "center"}
 
 STYLES = {"R00": R00}
 for _p in CP.PATTERNS:
@@ -44,10 +44,15 @@ BY_MOOD = {
 }
 
 
+REF_LOOK_DEFAULT = True   # BiBi Nov 24: captions like ref1/ref2 (serif, coloured glow, centred on the speaker)
+
+
 def pick_style(mood: str, seed: str = "") -> dict:
     forced = os.environ.get("CAPTION_STYLE", "").strip().upper()
     if forced in STYLES:
         return STYLES[forced]
+    if REF_LOOK_DEFAULT:
+        return R00
     pool = BY_MOOD.get(mood or "", BY_MOOD["dark_hype"])
     n = int(os.environ.get("GITHUB_RUN_NUMBER") or 0) + zlib.crc32(seed.encode())
     return STYLES[pool[n % len(pool)]]
@@ -248,6 +253,34 @@ def place_beside(bw, bh, pat, step, faces, main, W, H, band, alt):
     return best
 
 
+def place_center(bw, bh, pat, faces, main, W, H, band):
+    """ref1/ref2 placement: horizontally centred on the speaker, at chin / upper-chest height (just under the
+    face), or mid-picture when no face is found. Moves above the face / to picture centre if it would cover one."""
+    margin = int(W * 0.05)
+    top, bot = band
+    cands = []
+    if main:
+        fx = (main[0] + main[2]) / 2 * W
+        fh = (main[3] - main[1]) * H
+        cx = min(max(fx, margin + bw / 2), W - margin - bw / 2)
+        cands.append((int(cx - bw / 2), int(main[3] * H + 0.15 * fh), "center-chin"))
+        cands.append((int(W / 2 - bw / 2), int(top + (bot - top) * pat["no_face_y"] - bh / 2), "center-mid"))
+        cands.append((int(cx - bw / 2), int(main[1] * H - 0.1 * fh - bh), "center-above"))
+    else:
+        cands.append((int(W / 2 - bw / 2), int(top + (bot - top) * pat["no_face_y"] - bh / 2), "center-noface"))
+    best = None
+    for x, y, zone in cands:
+        y = max(top, min(y, bot - bh))
+        x = max(margin // 2, min(x, W - bw - margin // 2))
+        box = (x + 12, y + 12, x + bw - 12, y + bh - 12)
+        ov = int(sum(_inter(box, (f[0] * W, f[1] * H, f[2] * W, f[3] * H)) for f in faces))
+        if best is None or ov < best[3]:
+            best = (x, y, "center", ov, zone)
+        if ov == 0:
+            break
+    return best
+
+
 def build_events(groups: list[dict], punch_i: int | None, pat: dict, dialogue_video: Path,
                  W: int, H: int, band: tuple, fps: int) -> tuple[list[dict], dict]:
     """groups: [{'start','end','words':[{word,s,e,i}]}] -> Remotion caption events with x/y/lines."""
@@ -273,7 +306,7 @@ def build_events(groups: list[dict], punch_i: int | None, pat: dict, dialogue_vi
         main = max(mid, key=lambda b: (b[2] - b[0]) * (b[3] - b[1])) if mid else None
         nwords = len([w for w in g["words"] if clean_word(w["word"])])
         ci0, k = color_i, WORDS_SCALE.get(nwords, 0.92)
-        avail = free_width(main, pat, W)
+        avail = W * 0.8 if pat.get("place") == "center" else free_width(main, pat, W)
         while True:  # pro-edit proportions; shrink (down to the readable minimum) until it fits beside the speaker
             items, color_i = style_items(g["words"], pat, size_h * k, ci0, punch_i)
             if not items:
@@ -284,7 +317,10 @@ def build_events(groups: list[dict], punch_i: int | None, pat: dict, dialogue_vi
             k *= 0.93
         if not items:
             continue
-        x, y, align, ov, zone = place_beside(bw, bh, pat, n, fset, main, W, H, band, alt)
+        if pat.get("place") == "center":
+            x, y, align, ov, zone = place_center(bw, bh, pat, fset, main, W, H, band)
+        else:
+            x, y, align, ov, zone = place_beside(bw, bh, pat, n, fset, main, W, H, band, alt)
         if not main:
             alt += 1
         zones[zone.split("-")[0]] = zones.get(zone.split("-")[0], 0) + 1

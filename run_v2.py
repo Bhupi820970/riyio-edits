@@ -16,6 +16,7 @@ from pipeline_lib import channel_blocklist, link_queue, channel_source
 from pipeline_lib import montage_select as msel
 from pipeline_lib import song_mood as SM
 from pipeline_lib import shot_library as SL
+from pipeline_lib import dialogue_guard as DG
 
 # Rotating famous-scene bank by GENRE: iconic ENGLISH dialogue (anime = English dub; sports/games may use
 # English commentary / team radio / cutscene dialogue). GENRE env forces a genre, QUERY env forces a query.
@@ -229,8 +230,13 @@ def exposure_check(draft, samples, pic):
     return round(style.luma_drop(fin, srcs), 4), list(zip(fin, srcs))
 
 
+VOICE_BAND = "highpass=f=90,lowpass=f=7500"   # transcription input: the SOURCE's own audio only (never our song)
+
+
 def extract_wav(src, dest, start, duration):
-    run(["ffmpeg", "-y", "-ss", f"{start:.3f}", "-t", f"{duration:.3f}", "-i", str(src), "-vn", "-ac", "1", "-ar", "16000", str(dest)])
+    """16 kHz mono wav of the source's original audio (before any music is mixed in), voice band only."""
+    run(["ffmpeg", "-y", "-ss", f"{start:.3f}", "-t", f"{duration:.3f}", "-i", str(src), "-vn", "-af", VOICE_BAND,
+         "-ac", "1", "-ar", "16000", str(dest)])
     return dest
 
 
@@ -245,13 +251,19 @@ def make_sfx(assets_dir):
     return hit, whoosh
 
 
-def find_speech_window(src, dur, length=40.0, scan=240.0, min_words=MIN_WORDS):
-    """Transcribe up to `scan` seconds after the intro and return the densest-speech window."""
+def find_speech_window(src, dur, length=40.0, scan=240.0, min_words=MIN_WORDS, avoid=None, quote=""):
+    """Transcribe up to `scan` seconds after the intro and return the densest-speech window.
+    avoid = absolute spans of sung vocals (Gemini song_vocal_spans): their words never count as speech.
+    quote = Gemini's dialogue_quote: windows containing those words win."""
     lo = min_start(dur)
     hi = min(usable_end(dur), lo + scan)
     if hi - lo < DLG_MIN:
         return None
     ws = cut_outro(whisper_words(extract_wav(src, Path("clips/scan.wav"), lo, hi - lo)))
+    spans = DG.clean_spans(avoid)
+    ws = [w for w in ws if not DG.LYRIC_MARK.search(str(w.get("word", "")))
+          and not DG.in_spans(lo + (w["s"] + w["e"]) / 2, spans)]
+    qset = set(DG.content(DG.tokens(quote)))
     print("SCAN words", len(ws), f"in {lo:.0f}-{hi:.0f}s", flush=True)
     if len(ws) < min_words:
         return None
@@ -259,7 +271,10 @@ def find_speech_window(src, dur, length=40.0, scan=240.0, min_words=MIN_WORDS):
     for i, w in enumerate(ws):
         start = max(0.0, w["s"] - 1.0)
         end = start + length
-        n = sum(1 for x in ws[i:] if x["e"] <= end)
+        inw = [x for x in ws[i:] if x["e"] <= end]
+        n = len(inw)
+        if qset:
+            n += 3 * len(qset & set(DG.content(DG.tokens(DG.words_text(inw)))))
         if n > best_n:
             best, best_n = (lo + start, lo + min(end, hi - lo)), n
     if best_n < min_words:
@@ -489,17 +504,26 @@ def build_draft(src, info, dur, w, h, query, demo, cand, used_urls=None):
         raise CandidateRejected(f"dialogue window too short {ds:.1f}-{de:.1f}")
     win_len = min(ue - ds, de - ds + 1.5)
     words, lang = transcribe_window(src, ds, win_len)
-    if len(words) < min_words:
-        print("too few words -> shifting to highest-speech segment", flush=True)
-        win = find_speech_window(src, dur, length=DLG_MAX + 1, min_words=min_words)
+    # captions must be a character's spoken line, never song lyrics (BiBi Nov 24): check the window first
+    quote, sung = str(plan.get("dialogue_quote") or ""), DG.clean_spans(plan.get("song_vocal_spans"))
+    lyr = DG.lyric_reasons(words, ds, quote, sung, check_quote=not bad_plan)
+    if lyr:
+        print("LYRICS GUARD: window", f"{ds:.1f}s", "looks like song lyrics / not the scene's dialogue:", lyr,
+              "| heard:", DG.words_text(words)[:160], flush=True)
+    if len(words) < min_words or lyr:
+        print("too few words / lyrics -> shifting to highest-speech segment (sung parts skipped)", flush=True)
+        win = find_speech_window(src, dur, length=DLG_MAX + 1, min_words=min_words, avoid=sung, quote=quote)
         if not win:
-            raise CandidateRejected(f"no speech segment with >= {min_words} words")
+            raise CandidateRejected(f"no spoken (non-song) segment with >= {min_words} words")
         ds, de = win
         punch_abs = None
         win_len = de - ds
         words, lang = transcribe_window(src, ds, win_len)
         if len(words) < min_words:
             raise CandidateRejected(f"only {len(words)} words after shift")
+        lyr = DG.lyric_reasons(words, ds, quote, sung, check_quote=False)
+        if lyr:
+            raise CandidateRejected(f"captions would be song lyrics, not dialogue: {lyr}")
 
     pidx = style.find_punch(words, plan.get("punch_word", ""), (punch_abs - ds) if punch_abs is not None else None)
     punch_s, punch_e = words[pidx]["s"], words[pidx]["e"]
@@ -706,9 +730,18 @@ def build_draft(src, info, dur, w, h, query, demo, cand, used_urls=None):
 
     # ---- captions: speaker-side styles (pro-edit P01-P15 + R00 glow), word-level timing ----
     cap_style = captions_mod.pick_style(mood, info.get("url", "") + query)
-    groups = style.group_captions(words, pidx, dialogue_frames / FPS, max_words=min(4, cap_style["words"] + 1))
+    # last guard: only words a character says inside the dialogue section (no sung part / song title / montage)
+    song_meta = next((x for x in catalog if x.get("file") == song_name), None)
+    cap_words, dropped = DG.filter_words(words, dialogue_frames / FPS, ds, sung, song_meta)
+    if dropped:
+        print("CAPTION GUARD dropped:", dropped, flush=True)
+    if len(cap_words) < 3:
+        raise CandidateRejected(f"only {len(cap_words)} caption words left after the lyrics guard")
+    cap_pidx = next((i for i, w in enumerate(cap_words) if w is words[pidx]), len(cap_words) - 1)
+    groups = style.group_captions(cap_words, cap_pidx, dialogue_frames / FPS, max_words=min(4, cap_style["words"] + 1))
     groups = [{"start": g["start"], "end": g["end"], "words": g["raw"]} for g in groups]
-    cap_events, cap_info = captions_mod.build_events(groups, pidx, cap_style, dlg, style.W, style.H, band, FPS)
+    cap_events, cap_info = captions_mod.build_events(groups, cap_pidx, cap_style, dlg, style.W, style.H, band, FPS)
+    cap_events = DG.captions_in_window(cap_events, dialogue_frames / FPS)
     print("CAPTIONS style", cap_style["id"], cap_style["name"], "|", len(cap_events), "events", cap_info, flush=True)
     hook = (plan.get("hook_title") or plan.get("hook") or "").strip().strip('"')
     if not style.good_hook(hook):
@@ -788,6 +821,9 @@ def build_draft(src, info, dur, w, h, query, demo, cand, used_urls=None):
             "beat_s": tl["ibi"], "words": len(words), "language": lang,
             "dialogue_s": round(dialogue_frames / FPS, 2), "montage_s": round(sum(outro_lens) / FPS, 2),
             "montage_cuts": len(outro_lens), "total_s": round(total / FPS, 2), "captions": len(cap_events),
+            "caption_text": DG.words_text(cap_words), "caption_dropped": dropped,
+            "dialogue_quote": quote, "song_vocal_spans": sung,
+            "lyric_check": DG.lyric_reasons(cap_words, ds, quote, sung, check_quote=False),
             "caption_style": f"{cap_style['id']} {cap_style['name']}", "caption_zones": cap_info}
     Path("plan.json").write_text(json.dumps(meta, indent=2, default=str))
     print("PLAN", json.dumps({k: meta[k] for k in ("genre", "scene", "punch", "punch_s", "drop_s", "intro_s",
@@ -987,6 +1023,7 @@ def main():
         pl = ctx["plan"]
         facts = {"duration_s": round(dlen, 2), "genre": pl.get("genre"), "language": pl.get("language"),
                  "whisper_words": pl.get("words"), "caption_groups": pl.get("captions"),
+                 "caption_text": pl.get("caption_text"), "scene_dialogue_quote": pl.get("dialogue_quote"),
                  "caption_style": pl.get("caption_style"), "first_word_s": pl.get("first_word_s"),
                  "punch_word": pl.get("punch"), "punch_word_s": pl.get("punch_s"), "drop_s": pl.get("drop_s"),
                  "intro_montage_s": pl.get("intro_s"), "dialogue_start_s": pl.get("dialogue_start_s"),
@@ -1016,6 +1053,10 @@ def main():
             local.append(f"picture {pl['luma_drop'] * 100:.0f}% darker than the source (max {style.LUMA_MAX_DROP:.0%})")
         if abs(_num(pl.get("drop_s"), 0) - _num(pl.get("punch_s"), -9)) > 0.05:
             local.append("drop not on the punch word")
+        if pl.get("lyric_check"):
+            local.append(f"captions look like song lyrics: {pl['lyric_check']}")
+        if verdict.get("captions_lyrics"):
+            verdict["retry_new_clip"] = True
         if local:
             verdict["pass"] = False
             verdict["issues"] = list(verdict.get("issues") or []) + local
