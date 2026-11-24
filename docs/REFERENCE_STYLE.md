@@ -21,7 +21,7 @@ BiBi rules: length 35s-60s; English captions synced to lips; best quality; Gemin
 - NO opening question / hook caption (removed Nov 24 2026): captions appear only during the dialogue.
 
 ## Look
-- Grade: contrast ~1.25, saturation ~0.6, brightness ~0.9, teal/blue shadows (ref2 cold winter look), crushed blacks; film grain in darks.
+- Grade (Nov 24 2026, BiBi "jyada hi dark"): bright and natural, exposure within ~5% of the source: slight saturation pop (1.1), gentle mid/highlight curve, NO eq contrast / negative brightness / gamma / vignette / crushed blacks, light teal-orange, light grain. QC fails if the picture is >8% darker than the source frames.
 - Sharpen: unsharp=5:5:1.0:5:5:0.0. ref1 is 60fps with optical-flow smoothness.
 - Small creator watermark fades in and out (cursive), plus glowing brand at the end.
 

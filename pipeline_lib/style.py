@@ -12,11 +12,18 @@ BANNED_HOOKS = {"she read him cold", "money really talks", "built different", "f
                 "winter is finally here", "i am the danger"}
 
 # 16:9 (or any) source -> 4:5 frame, no crop of the main picture; blurred + darkened copy fills top/bottom.
-# Grade per spec: contrast ~1.25, saturation ~0.6, brightness ~0.9, teal shadows, crushed blacks, grain, unsharp 5:5:1.0.
-GRADE = ("eq=contrast=1.25:saturation=0.62:brightness=-0.035:gamma=0.95,"
-         "colorbalance=rs=-0.05:gs=0.0:bs=0.08:rh=0.02:bh=-0.02,"
-         "curves=master='0/0 0.08/0.02 0.5/0.48 1/1',"
-         "unsharp=5:5:1.0:5:5:0.0,noise=alls=7:allf=t")   # light moving film grain like ref1/ref2
+# Grade (BiBi, Nov 24: "jyada hi dark"): the old grade (eq contrast 1.25 pivoting at mid-grey + brightness -0.035 +
+# gamma 0.95 + saturation 0.62 + a curve that crushed 0.08 -> 0.02) cut the picture luma to 12-67% of the source
+# (dark scenes worst). Now: bright and natural, exposure kept within ~2% of the source. No eq contrast (it darkens
+# every shot darker than mid-grey), no crushed blacks (shadows untouched, black point lifted 1%), a gentle
+# mid/highlight pop on the curve, slight saturation pop, light teal/orange, light sharpening, light grain.
+GRADE = ("eq=saturation=1.1,"
+         "curves=master='0/0.01 0.1/0.105 0.3/0.31 0.6/0.62 0.85/0.88 1/1',"
+         "colorbalance=rs=-0.02:bs=0.03:rh=0.02:bh=-0.01,"
+         "unsharp=5:5:0.6:5:5:0.0,noise=alls=4:allf=t")   # light moving film grain like ref1/ref2
+FILL_BRIGHTNESS = -0.04       # blurred fill above/below the picture (was -0.12: a near-black frame around it)
+# exposure guard: the final picture's mean luma may be at most this much below the source (QC + tests)
+LUMA_MAX_DROP = 0.08
 
 # Reference look (idea 4): light colour split only on the hit cuts (drop + hero shots), first ~0.12 s.
 RGB_SPLIT = "rgbashift=rh=-4:bh=4:rv=1:bv=-1:enable='lt(t,0.12)'"
@@ -32,7 +39,7 @@ def frame_filter(rgb_split: bool = False, crop: str = "") -> str:
     pre = f"crop={crop}," if crop else ""
     fc = (f"[0:v]{pre}split=2[a][b];"
           f"[a]scale=270:338:force_original_aspect_ratio=increase,crop=270:338,boxblur=12:2,"
-          f"eq=brightness=-0.12:saturation=0.75,scale={W}:{H}[bg];"
+          f"eq=brightness={FILL_BRIGHTNESS}:saturation=0.85,scale={W}:{H}[bg];"
           f"[b]scale={W}:{H}:force_original_aspect_ratio=decrease:flags=lanczos[fg];"
           f"[bg][fg]overlay=(W-w)/2:(H-h)/2,{GRADE}")
     if rgb_split:
@@ -270,3 +277,12 @@ def strip_intro_question(plan: dict) -> dict:
     for k in INTRO_QUESTION_KEYS:
         plan.pop(k, None)
     return plan
+
+
+def luma_drop(final_y: list[float], source_y: list[float]) -> float:
+    """Pure: how much darker the final picture is than the source (0.1 = 10% darker; negative = brighter).
+    Inputs are matching mean-luma samples (picture area only)."""
+    pairs = [(f, s) for f, s in zip(final_y, source_y) if s and s > 1.0]
+    if not pairs:
+        return 0.0
+    return 1.0 - sum(f for f, _ in pairs) / sum(s for _, s in pairs)

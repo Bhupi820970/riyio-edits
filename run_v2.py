@@ -209,6 +209,26 @@ def prep_cut(src, dest, start, duration, audio=True, rgb=False, preset="fast", c
         raise RuntimeError(f"cut produced no file: {dest}")
 
 
+def frame_luma(path, t, crop=""):
+    """Mean luma (0-255) of one frame at t seconds, optional crop w:h:x:y (64x64 grey, cheap)."""
+    pre = f"crop={crop}," if crop else ""
+    r = subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{max(0.0, t):.3f}", "-i", str(path), "-frames:v", "1",
+                        "-vf", f"{pre}scale=64:64,format=gray", "-f", "rawvideo", "-"], capture_output=True)
+    return (sum(r.stdout) / len(r.stdout)) if r.stdout else 0.0
+
+
+def exposure_check(draft, samples, pic):
+    """Final picture vs the same source frames: returns (drop, pairs). drop 0.1 = 10% darker than the source."""
+    pc = f"{pic['w']}:{pic['h']}:{pic['x']}:{pic['y']}"
+    fin, srcs = [], []
+    for sm in samples:
+        a, b = frame_luma(draft, sm["video_t"], pc), frame_luma(sm["src"], sm["src_t"], sm["crop"])
+        if b > 1.0:
+            fin.append(round(a, 2))
+            srcs.append(round(b, 2))
+    return round(style.luma_drop(fin, srcs), 4), list(zip(fin, srcs))
+
+
 def extract_wav(src, dest, start, duration):
     run(["ffmpeg", "-y", "-ss", f"{start:.3f}", "-t", f"{duration:.3f}", "-i", str(src), "-vn", "-ac", "1", "-ar", "16000", str(dest)])
     return dest
@@ -776,6 +796,26 @@ def build_draft(src, info, dur, w, h, query, demo, cand, used_urls=None):
     if not draft.exists() or draft.stat().st_size < 1000:
         raise RuntimeError("Remotion produced no output")
     print("REMOTION OK", draft.stat().st_size, "dur", probe_duration(draft), "expected", round(total / FPS, 2), flush=True)
+    # exposure guard (BiBi Nov 24 "jyada hi dark"): montage picture vs the same source frames + 2 dialogue points
+    starts = [sum(lens[:i]) for i in range(len(lens))]
+    samples = []
+    for i in range(1, len(picks), max(1, len(picks) // 8)):
+        pk = picks[i]
+        vf = starts[i] + (dialogue_frames if i >= n_in else 0)
+        samples.append({"video_t": vf / FPS + pk["dur"] / 2, "src": sources[pk["src"]][0], "src_t": pk["start"] + pk["dur"] / 2,
+                        "crop": sources[pk["src"]][1] or ""})
+    for k in (0.35, 0.7):
+        samples.append({"video_t": intro_frames_total / FPS + D * k, "src": src, "src_t": ds + D * k,
+                        "crop": LETTERBOX["crop"] or ""})
+    try:
+        drop_l, pairs = exposure_check(draft, samples, pic)
+    except Exception as e:
+        drop_l, pairs = 0.0, []
+        print("EXPOSURE check error", repr(e)[:150], flush=True)
+    print(f"EXPOSURE final vs source luma: {drop_l * 100:+.1f}% darker (limit {style.LUMA_MAX_DROP * 100:.0f}%)", pairs,
+          flush=True)
+    meta.update({"luma_drop": drop_l, "luma_pairs": pairs})
+    Path("plan.json").write_text(json.dumps(meta, indent=2, default=str))
     return {"draft": draft, "props": props, "plan": meta, "info": info}
 
 
@@ -948,7 +988,8 @@ def main():
                  "montage_repeats_found": pl.get("montage_repeats"),
                  "watermark": f"small faint glass RIYIO ({style.WM_OPACITY:.0%} opacity) inside the picture, bottom-center",
                  "intro_caption": "none (no opening question caption)", "scene_mood": pl.get("scene_mood"),
-                 "song_mood": pl.get("song_mood"), "hit_cuts": pl.get("hit_cuts"), "black_segments": blacks,
+                 "song_mood": pl.get("song_mood"), "hit_cuts": pl.get("hit_cuts"),
+                 "luma_vs_source": f"{-_num(pl.get('luma_drop'), 0) * 100:+.1f}%", "black_segments": blacks,
                  "silent_segments": silences}
         print("QC FACTS", json.dumps(facts), flush=True)
         qc360 = Path("draft360.mp4")
@@ -963,6 +1004,8 @@ def main():
             local.append(f"music not audible: {silences[:3]}")
         if pl.get("montage_repeats"):
             local.append(f"montage repeats {pl.get('montage_repeats')} shot(s)")
+        if _num(pl.get("luma_drop"), 0) > style.LUMA_MAX_DROP:
+            local.append(f"picture {pl['luma_drop'] * 100:.0f}% darker than the source (max {style.LUMA_MAX_DROP:.0%})")
         if abs(_num(pl.get("drop_s"), 0) - _num(pl.get("punch_s"), -9)) > 0.05:
             local.append("drop not on the punch word")
         if local:

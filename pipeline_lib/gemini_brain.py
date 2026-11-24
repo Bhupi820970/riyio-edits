@@ -204,6 +204,7 @@ more than ~20 seconds of talking / dialogue scene; black frames; music not audib
 a montage that repeats a shot / near-identical framing, is mostly one static setting or talking heads, looks like
 one continuous clip, or whose shots have nothing to do with the dialogue's title, characters or mood;
 captions too big (covering much of the picture) or too small to read;
+a picture clearly darker / murkier than a normal movie frame (crushed blacks, faces lost in shadow, heavy vignette);
 an end card; watermark missing, big / bold / opaque, or on the black/blurred bars; any logo other than RIYIO; total length outside 35-60 seconds;
 ANY channel outro / end screen / "like & subscribe" graphic or promo speech ANYWHERE in the video (also mid-video),
 or captions showing words like SUBSCRIBE / CHANNEL / SUPPORT US.
