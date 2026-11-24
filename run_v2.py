@@ -628,11 +628,13 @@ def build_draft(src, info, dur, w, h, query, demo, cand, used_urls=None):
               "main chunks boosted from earlier picks", flush=True)
     min_len = min(intro_s + outro_s)
     pool = msel.unique_pool(chunks, min_len)
-    strong = [c for c in pool if c.energy >= 5 or c.motion >= 12 or c.loud >= 7]
-    print(f"MONTAGE main: {len(chunks)} chunks, {len(pool)} unique looks, {len(strong)} strong, need {need}; "
-          f"director says sufficient={plan.get('montage_sufficient')}", flush=True)
+    strong = [c for c in pool if msel.is_strong(c)]
+    want_extra, why_extra = msel.needs_extra(pool, need, plan.get("montage_sufficient"))
+    print(f"MONTAGE main: {len(chunks)} chunks, {len(pool)} unique moving looks, {len(strong)} strong, need {need}; "
+          f"director says sufficient={plan.get('montage_sufficient')} -> extra sources: {want_extra} ({why_extra})",
+          flush=True)
     extras_used = []
-    if len(pool) < need or len(strong) < int(0.6 * need) or plan.get("montage_sufficient") is False:
+    if want_extra:
         context = {"title": plan.get("title") or info.get("title", ""), "scene": plan.get("scene", ""),
                    "characters": plan.get("characters") or [], "dialogue": " ".join(w["word"] for w in words),
                    "mood": mood, "hook": plan.get("hook_title", "")}
@@ -642,19 +644,25 @@ def build_draft(src, info, dur, w, h, query, demo, cand, used_urls=None):
             xc = msel.inventory(xpath, sid, min(3.0, xd * 0.05), usable_end(xd), crop=xcrop)
             msel.apply_gemini(xc, xshots, sid)
             # an extra source only contributes the shots Gemini judged relevant (or clearly moving)
-            xc = [c for c in xc if c.energy >= 4 or c.motion >= 14 or c.loud >= 7]
+            xc = [c for c in xc if c.energy >= 4 or c.motion >= 14]
             chunks += xc
             sources[sid] = (xpath, xcrop)
             src_ids[sid] = (link_queue._vid(xinfo.get("url", "")), xinfo)
             extras_used.append({"id": sid, "title": xinfo.get("title", ""), "channel": xinfo.get("channel", ""),
                                 "url": xinfo.get("url", ""), "chunks": len(xc)})
             pool = msel.unique_pool(chunks, min_len)
-            strong = [c for c in pool if c.energy >= 5 or c.motion >= 12 or c.loud >= 7]
-            print(f"MONTAGE +{sid}: {len(xc)} relevant chunks -> {len(pool)} unique, {len(strong)} strong", flush=True)
-            if len(pool) >= need and len(strong) >= int(0.6 * need):
+            strong = [c for c in pool if msel.is_strong(c)]
+            more, why_extra = msel.needs_extra(pool, need)
+            print(f"MONTAGE +{sid}: {len(xc)} relevant chunks -> {len(pool)} unique, {len(strong)} strong ({why_extra})",
+                  flush=True)
+            if not more:
                 break
     try:
-        picks = msel.select(chunks, intro_s, outro_s)
+        try:
+            picks = msel.select(chunks, intro_s, outro_s)
+        except msel.NotEnough as e:   # motion floor leaves too few shots: relax it rather than drop the clip
+            print(f"MONTAGE motion floor relaxed ({e})", flush=True)
+            picks = msel.select(chunks, intro_s, outro_s, min_motion=0.0)
     except msel.NotEnough as e:
         raise CandidateRejected(f"not enough distinct montage shots ({e}) even with {len(extras_used)} extra source(s)")
     bad = msel.audit(picks)

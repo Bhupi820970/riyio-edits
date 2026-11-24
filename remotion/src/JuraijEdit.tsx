@@ -52,6 +52,10 @@ if (typeof document !== 'undefined') {
 }
 const FONT = {anton: '"RiyioAnton", "Anton", Impact, sans-serif', playfair: '"RiyioPlayfair", "Playfair Display", "P052", serif'};
 
+// soft drop flash (BiBi Nov 24): peak opacity and length in frames
+export const DROP_FLASH_OPACITY = 0.6;
+export const DROP_FLASH_FRAMES = 2;
+
 const ActionClip: React.FC<{src: string; kind?: string}> = ({src, kind}) => {
   const frame = useCurrentFrame();
   // pro-edit hard cuts on the beat with a slight 1.04 crop-in; the post-drop flurry gets a quick punch-in
@@ -152,10 +156,10 @@ export const JuraijEdit: React.FC<JuraijProps> = (p) => {
         </Sequence>
       ))}
 
-      {/* Drop flash on the punch word */}
-      {frame >= p.dropFrame && frame < p.dropFrame + 4 && (
+      {/* Drop flash on the punch word: soft 60% white for 2 frames (BiBi, Nov 24; was 100% for 4 frames) */}
+      {frame >= p.dropFrame && frame < p.dropFrame + DROP_FLASH_FRAMES && (
         <AbsoluteFill style={{backgroundColor: '#fff', zIndex: 30,
-          opacity: interpolate(frame - p.dropFrame, [0, 4], [1, 0])}} />
+          opacity: interpolate(frame - p.dropFrame, [0, DROP_FLASH_FRAMES], [DROP_FLASH_OPACITY, 0])}} />
       )}
 
       {/* White top hook banner, black bold title — whole video */}

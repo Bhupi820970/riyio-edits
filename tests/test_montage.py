@@ -134,14 +134,78 @@ def test_arrange_outro_pure():
     assert rest == sorted(rest)                                          # rising in between
 
 
+def _band_noise(rng, n, sr, lo, hi, amp):
+    x = rng.standard_normal(n)
+    f = np.fft.rfft(x)
+    fr = np.fft.rfftfreq(n, 1 / sr)
+    f[(fr < lo) | (fr > hi)] = 0
+    y = np.fft.irfft(f, n)
+    return (amp * y / (np.abs(y).max() + 1e-9)).astype(np.float32)
+
+
 def test_loudness_scores_peak_vs_quiet():
-    sr = 8000
-    t = np.arange(sr * 10) / sr
-    sig = 0.02 * np.sin(2 * np.pi * 220 * t)
-    sig[sr * 6: sr * 7] = 0.8 * np.sin(2 * np.pi * 110 * t[sr * 6: sr * 7])   # explosion at 6-7 s
-    sc = M.loudness_scores(sig.astype(np.float32), sr, 100.0, [(101.0, 103.0), (105.8, 107.2), (108.0, 109.5)])
+    sr = M.AUDIO_SR
+    rng = np.random.default_rng(1)
+    sig = _band_noise(rng, sr * 10, sr, 20, 7000, 0.02)
+    sig[sr * 6: sr * 7] += _band_noise(rng, sr, sr, 30, 90, 0.8)          # explosion at 6-7 s (sub-bass)
+    sc = M.loudness_scores(sig, sr, 100.0, [(101.0, 103.0), (105.8, 107.2), (108.0, 109.5)])
     assert sc[1] >= 9.0 and sc[0] <= 2.0 and sc[2] <= 2.0
     assert M.loudness_scores(np.zeros(10, np.float32), sr, 0.0, [(0, 1)]) == [0.0]
+
+
+def test_loud_speech_is_ignored_effects_count():
+    """A man shouting (voice band, syllable-modulated, LOUDER) scores ~0; a quieter gunshot / impact scores high."""
+    sr = M.AUDIO_SR
+    rng = np.random.default_rng(2)
+    n = sr * 12
+    sig = _band_noise(rng, n, sr, 20, 7000, 0.01)
+    t = np.arange(sr * 4) / sr
+    speech = _band_noise(rng, sr * 4, sr, 350, 3000, 1.0) * (0.55 + 0.45 * np.sin(2 * np.pi * 4.5 * t)).astype(np.float32)
+    sig[sr * 2: sr * 6] += speech                                           # shouting 2-6 s
+    boom = _band_noise(rng, sr // 2, sr, 30, 100, 0.2) + _band_noise(rng, sr // 2, sr, 4500, 7500, 0.12)
+    sig[sr * 9: sr * 9 + sr // 2] += boom                                   # gunshot / impact at 9 s
+    sc = M.loudness_scores(sig, sr, 0.0, [(2.5, 5.5), (8.9, 9.6), (10.5, 11.5)])
+    assert float(np.sqrt(np.mean(speech ** 2))) > float(np.sqrt(np.mean(boom ** 2)))   # speech is louder overall
+    assert sc[0] <= 2.0, sc
+    assert sc[1] >= 8.0, sc
+    fx, share = M.band_profile(sig, sr)
+    assert share[30] > M.SPEECH_SHARE and share[92] < M.SPEECH_SHARE
+
+
+def test_motion_floor_drops_static_shots_unless_gemini_rates_them():
+    still = M.Chunk("main", 0, 2, 0x0F0F0F0F0F0F0F0F, motion=0.5, energy=0.0)
+    reveal = M.Chunk("main", 5, 7, 0xF0F0F0F0F0F0F0F0, motion=0.5, energy=8.0)
+    moving = M.Chunk("main", 10, 12, 0x00FF00FF00FF00FF, motion=6.0, energy=0.0)
+    assert not M.eligible(still) and M.eligible(reveal) and M.eligible(moving)
+    pool = M.unique_pool([still, reveal, moving], 0.4)
+    assert still not in pool and reveal in pool and moving in pool
+    rng = random.Random(11)
+    ch = _chunks("main", 90, rng)
+    for c in ch[::2]:
+        c.motion, c.energy = 0.3, 0.0                                       # half the shots are talking heads
+    picks = M.select(ch, LENS_I, LENS_O)
+    statics = {(c.src, c.shot) for c in ch[::2]}
+    assert not any((p["src"], p["shot"]) in statics for p in picks)
+
+
+def test_loudness_alone_is_not_strong_and_triggers_extra():
+    loud_only = [M.Chunk("main", i * 4.0, i * 4.0 + 2, i, motion=3.0, energy=0.0, loud=10.0, shot=i) for i in range(40)]
+    assert not any(M.is_strong(c) for c in loud_only)
+    yes, why = M.needs_extra(loud_only, 30)
+    assert yes and "strong" in why
+    rated = [M.Chunk("main", i * 4.0, i * 4.0 + 2, i, motion=13.0, energy=0.0, shot=i) for i in range(40)]
+    yes, why = M.needs_extra(rated, 30)                                     # moving, but Gemini rated nothing
+    assert yes and "Gemini" in why
+    good = [M.Chunk("main", i * 4.0, i * 4.0 + 2, i, motion=13.0, energy=6.0, shot=i) for i in range(40)]
+    assert M.needs_extra(good, 30) == (False, "enough")
+    assert M.needs_extra(good, 30, sufficient=False)[0]
+    assert M.needs_extra(good[:20], 30)[0]
+
+
+def test_pipeline_wiring_for_extras_and_floor():
+    run = (ROOT / "run_v2.py").read_text()
+    assert "msel.needs_extra(pool, need" in run and "c.loud >= 7" not in run
+    assert "min_motion=0.0" in run                                          # relaxed only as a last resort
 
 
 def test_loud_shot_wins_on_the_drop():

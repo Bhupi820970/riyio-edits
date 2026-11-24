@@ -7,8 +7,10 @@ select():     pure + unit-tested. Every chunk is used at most once, no two picks
               twice, the dialogue window is blocked, and the picks are ordered with intent:
               intro = build-up in story order; post-drop = the STRONGEST shot right on the drop (punch word),
               the next strongest on the hero cuts (the longer beat cuts), rising energy, 2nd best as the finale.
-Energy by sound (idea 2): every chunk also gets `loud` (0-10) from the source's own audio RMS peaks, so gunshots,
-              impacts and roars count as strong shots together with frame-difference motion and Gemini energy.
+Energy by sound (idea 2): every chunk also gets `loud` (0-10) from the source's own music / effects energy (sub-bass
+              + high band, speech-dominated windows ignored), so gunshots, impacts and roars rank higher but people
+              talking loudly do not. Loudness only ranks; it never makes a shot "strong" on its own (is_strong).
+Motion floor: static shots (motion < MIN_MOTION) are not used in the montages unless Gemini rated them >= 7.
 """
 from __future__ import annotations
 
@@ -48,7 +50,38 @@ class Chunk:
 
 
 LOUD_W = 0.4           # weight of the sound energy (0-10 -> up to +4, like motion's up to +5)
-AUDIO_SR = 8000
+AUDIO_SR = 16000
+MIN_MOTION = 2.0       # mean grey frame difference; talking heads / static frames sit at ~0.2-1.5
+STATIC_OK_ENERGY = 7.0 # Gemini energy that lets a static shot (a reveal, a stare) in anyway
+SPEECH_SHARE = 0.72    # window energy share in the 300-3400 Hz voice band above this = speech, not music / effects
+LOW_HZ, HIGH_HZ = 110.0, 4000.0
+STRONG_ENERGY, STRONG_MOTION = 5.0, 12.0
+GEMINI_MIN_RATED = 0.4 # if fewer than 40% of the unique shots carry a Gemini rating, fetch related videos
+
+
+def eligible(c: "Chunk", min_motion: float = MIN_MOTION) -> bool:
+    """Montage-worthy: moving enough, or a static shot Gemini rated very strong."""
+    return c.motion >= min_motion or c.energy >= STATIC_OK_ENERGY
+
+
+def is_strong(c: "Chunk") -> bool:
+    """Strong shot = Gemini energy or clear motion. Loudness alone never counts."""
+    return c.energy >= STRONG_ENERGY or c.motion >= STRONG_MOTION
+
+
+def needs_extra(pool: list["Chunk"], need: int, sufficient=None) -> tuple[bool, str]:
+    """Pure: should the montage fetch 1-2 related videos? Returns (yes, why)."""
+    strong = sum(1 for c in pool if is_strong(c))
+    rated = sum(1 for c in pool if c.energy > 0)
+    if len(pool) < need:
+        return True, f"only {len(pool)} unique shots for {need} cuts"
+    if strong < int(0.6 * need):
+        return True, f"only {strong} strong shots (need {int(0.6 * need)})"
+    if pool and rated < GEMINI_MIN_RATED * min(len(pool), need):
+        return True, f"Gemini rated only {rated} of {len(pool)} shots (energy mostly 0)"
+    if sufficient is False:
+        return True, "director says this clip alone is not enough"
+    return False, "enough"
 
 
 def read_audio(path, start: float, end: float, sr: int = AUDIO_SR) -> np.ndarray:
@@ -59,22 +92,42 @@ def read_audio(path, start: float, end: float, sr: int = AUDIO_SR) -> np.ndarray
     return np.frombuffer(raw[: len(raw) // 2 * 2], np.int16).astype(np.float32) / 32768.0
 
 
-def loudness_scores(samples: np.ndarray, sr: int, t0: float, spans: list[tuple[float, float]],
-                    win: float = 0.1) -> list[float]:
-    """Pure: 0-10 loudness per span = the 90th-percentile 100 ms RMS inside the span, scaled against the
-    whole source (10 = as loud as the source's loudest moments, 0 = silence)."""
-    if samples is None or len(samples) < sr * win * 2:
-        return [0.0] * len(spans)
+def band_profile(samples: np.ndarray, sr: int, win: float = 0.1) -> tuple[np.ndarray, np.ndarray]:
+    """Pure: per 100 ms window -> (music/effects energy = RMS of the sub-bass + high band, voice-band share 0-1)."""
     n = int(sr * win)
     k = len(samples) // n
-    rms = np.sqrt(np.mean(samples[: k * n].reshape(k, n) ** 2, axis=1) + 1e-12)
-    lo, hi = float(np.percentile(rms, 10)), float(np.percentile(rms, 99))
-    if hi - lo < 1e-6:
+    if k < 2:
+        return np.zeros(0, np.float32), np.zeros(0, np.float32)
+    fr = np.fft.rfftfreq(n, 1.0 / sr)
+    low, high = fr < LOW_HZ, fr > HIGH_HZ
+    voice = (fr >= 300) & (fr <= 3400)
+    fx, share = np.zeros(k, np.float32), np.zeros(k, np.float32)
+    win_fn = np.hanning(n).astype(np.float32)
+    for a in range(0, k, 1000):                      # blocks keep memory small on long sources
+        b = min(k, a + 1000)
+        spec = np.abs(np.fft.rfft(samples[a * n: b * n].reshape(b - a, n) * win_fn, axis=1)) ** 2
+        tot = spec.sum(axis=1) + 1e-12
+        fx[a:b] = np.sqrt((spec[:, low].sum(axis=1) + spec[:, high].sum(axis=1)) / n)
+        share[a:b] = spec[:, voice].sum(axis=1) / tot
+    return fx, share
+
+
+def loudness_scores(samples: np.ndarray, sr: int, t0: float, spans: list[tuple[float, float]],
+                    win: float = 0.1) -> list[float]:
+    """Pure: 0-10 music / effects loudness per span = 90th percentile of the non-speech energy inside the span,
+    scaled against the whole source. Speech-dominated windows count as 0, so loud talking never scores high."""
+    if samples is None or len(samples) < sr * win * 2:
+        return [0.0] * len(spans)
+    fx, share = band_profile(samples, sr, win)
+    k = len(fx)
+    fx = np.where(share > SPEECH_SHARE, 0.0, fx)
+    lo, hi = float(np.percentile(fx, 10)), float(np.percentile(fx, 99))
+    if hi - lo < 1e-9:
         return [0.0] * len(spans)
     out = []
     for s, e in spans:
         a, b = max(0, int((s - t0) / win)), min(k, max(int((s - t0) / win) + 1, int((e - t0) / win)))
-        seg = rms[a:b]
+        seg = fx[a:b]
         v = float(np.percentile(seg, 90)) if len(seg) else lo
         out.append(round(float(np.clip((v - lo) / (hi - lo), 0.0, 1.0)) * 10.0, 2))
     return out
@@ -188,12 +241,13 @@ def _clash(c: Chunk, start: float, dur: float, used: list[tuple[str, float, floa
     return any(u[0] == c.src and start < u[2] + gap and start + dur > u[1] - gap for u in used)
 
 
-def unique_pool(chunks: list[Chunk], min_len: float, dup: int = HASH_DUP, min_score: float = 0.0) -> list[Chunk]:
+def unique_pool(chunks: list[Chunk], min_len: float, dup: int = HASH_DUP, min_score: float = 0.0,
+                min_motion: float = MIN_MOTION) -> list[Chunk]:
     """Best-first chunks with no near-duplicate looks and no two chunks of the same camera shot unless they look
     different. Used to decide if a source has enough material."""
     out: list[Chunk] = []
     for c in sorted(chunks, key=lambda c: -c.score()):
-        if c.length < min_len or c.score() < min_score:
+        if c.length < min_len or c.score() < min_score or not eligible(c, min_motion):
             continue
         if any(hamming(c.hash, o.hash) <= dup for o in out):
             continue
@@ -202,14 +256,15 @@ def unique_pool(chunks: list[Chunk], min_len: float, dup: int = HASH_DUP, min_sc
 
 
 def select(chunks: list[Chunk], intro_lens: list[float], outro_lens: list[float],
-           blocked: list[tuple[str, float, float]] | None = None, gap: float = MIN_GAP, dup: int = HASH_DUP) -> list[dict]:
+           blocked: list[tuple[str, float, float]] | None = None, gap: float = MIN_GAP, dup: int = HASH_DUP,
+           min_motion: float = MIN_MOTION) -> list[dict]:
     """Pick one distinct chunk per cut. Returns [{src,start,dur,role,energy,kind,reason,hash}] (intro then outro).
     Raises NotEnough when the pool cannot fill every cut without repeats."""
     lens = list(intro_lens) + list(outro_lens)
     need = len(lens)
     used = list(blocked or [])
     free = [c for c in chunks if not _clash(c, c.s, c.length, used, gap)]
-    pool = unique_pool(free, min(lens) if lens else 0.3, dup)
+    pool = unique_pool(free, min(lens) if lens else 0.3, dup, min_motion=min_motion)
     if len(pool) < need:
         raise NotEnough(len(pool), need)
     # choose the best `need` chunks that can hold the cut lengths (longest cuts first get the longest chunks)
