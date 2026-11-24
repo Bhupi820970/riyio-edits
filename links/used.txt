@@ -30,3 +30,7 @@
 2026-11-24 09:21 IST	channel-used	https://www.youtube.com/watch?v=RkYgdYMy8qk	Final Fight Scene | GOOD LUCK, HAVE FUN, DON’T DIE (2026) Movie CLIP 4K
 2026-11-24 17:08 IST	rejected	https://www.youtube.com/watch?v=vahku8_57gI	Gemini Pass 1 rejected: The video is an AI-generated fan edit / concept movie trailer.
 2026-11-24 17:23 IST	channel-used	https://www.youtube.com/watch?v=SFlBXx8QTt4	The Ultimate Price of Rebellion | The Hunger Games: Mockingjay – Part 1 (4K)
+2026-11-24 19:46 IST	rejected	https://www.youtube.com/watch?v=bG6RW34jR64	error: RuntimeError("GEMINI failed: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand a
+2026-11-24 19:54 IST	rejected	https://www.youtube.com/watch?v=sZBp6SjxUBA	error: RuntimeError("GEMINI failed: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand a
+2026-11-24 19:59 IST	rejected	https://www.youtube.com/watch?v=sUUK_QYfzcM	error: RuntimeError("GEMINI failed: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand a
+2026-11-24 20:03 IST	rejected	https://www.youtube.com/watch?v=JZzlT6D8umg	Gemini Pass 1 rejected: Movie trailer
