@@ -34,3 +34,6 @@
 2026-11-24 19:54 IST	rejected	https://www.youtube.com/watch?v=sZBp6SjxUBA	error: RuntimeError("GEMINI failed: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand a
 2026-11-24 19:59 IST	rejected	https://www.youtube.com/watch?v=sUUK_QYfzcM	error: RuntimeError("GEMINI failed: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand a
 2026-11-24 20:03 IST	rejected	https://www.youtube.com/watch?v=JZzlT6D8umg	Gemini Pass 1 rejected: Movie trailer
+2026-11-25 09:45 IST	rejected	https://www.youtube.com/watch?v=Bx_lkj76104	pre-screen: The frames contain a studio logo in the top left corner and burned-in foreign language subtitles in the top right corner.
+2026-11-25 09:47 IST	rejected	https://www.youtube.com/watch?v=iibeGDalqe8	no comedy song fits the timeline (dialogue 10.2s)
+2026-11-25 09:56 IST	channel-used	https://www.youtube.com/watch?v=qjCVzly-Wg8	Barry Keoghan Interrogates Halle Berry | CRIME 101 (2026) Movie CLIP 4K
