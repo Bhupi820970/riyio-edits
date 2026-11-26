@@ -1,5 +1,12 @@
 {
   "channels": {
+    "astar djehuty se hotep": {
+      "count": 1,
+      "channel": "aSTAR Djehuty Se Hotep",
+      "reason": "pre-screen: There is a channel watermark/logo (HaSanMDD) present in the bottom-left corner of all frames.",
+      "example": "The Lion King 1994   Remember Who You Are Full Scene 4k kok1",
+      "last": "2026-11-26"
+    },
     "bbc": {
       "channel": "BBC",
       "reason": "Channel watermark visible in top-left corner (BBC logo)",
@@ -49,6 +56,13 @@
       "last": "2026-11-22",
       "count": 1
     },
+    "joblo superheroes": {
+      "count": 1,
+      "channel": "JoBlo Superheroes",
+      "reason": "pre-screen: The 'prime' video watermark logo is visible in the bottom-left corner of all provided frames.",
+      "example": "Homelander Can't Escape | THE BOYS | Radioactive Scene (4K)",
+      "last": "2026-11-26"
+    },
     "madd gamer": {
       "channel": "Madd Gamer",
       "reason": "Burned-in subtitles visible throughout",
@@ -69,6 +83,13 @@
       "reason": "pre-screen: Subtitle present in the second frame ('[crowd chanting] Professor! Professor!')",
       "example": "Finally Professor Enter The Bank Of Spain - Money Heist Scenes (Season 5)",
       "last": "2026-11-23"
+    },
+    "noaue": {
+      "count": 1,
+      "channel": "Noaue",
+      "reason": "pre-screen: The frames contain side black border bars with vertical text overlays reading 'NOAUE' on the left and 'SCENEPACK' on the right, which indicates a fan-edit or social media edit format.",
+      "example": "The Boys [Homelander] Scene Pack 4k Like Quality Motion Tracking ",
+      "last": "2026-11-26"
     },
     "otaku gaming": {
       "channel": "Otaku Gaming",
