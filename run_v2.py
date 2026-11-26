@@ -16,6 +16,7 @@ from pipeline_lib import channel_blocklist, link_queue, channel_source
 from pipeline_lib import montage_select as msel
 from pipeline_lib import song_mood as SM
 from pipeline_lib import shot_library as SL
+from pipeline_lib import clip_pool as POOL
 from pipeline_lib import dialogue_guard as DG
 
 # Rotating famous-scene bank by GENRE: iconic ENGLISH dialogue (anime = English dub; sports/games may use
@@ -304,6 +305,8 @@ def pick_song(pool, mood, out):
 
 
 def genre_of(query):
+    if query.startswith("pool:") and query[5:] in GENRES:
+        return query[5:]
     if query.startswith(("url:", "channel:")):
         g = os.environ.get("GENRE", "").strip().lower()
         return g if g in GENRES else "movies"
@@ -323,7 +326,13 @@ def fetch_and_screen(url, info_hint, used_urls):
     src = Path("clips/source.mp4")
     src.unlink(missing_ok=True)
     used_urls.add(url)
-    info = download_url(url, src)
+    pe = POOL.by_url(POOL_DOC, url) if POOL_DOC else None
+    info = None
+    if pe and pe.get("state") == "ready" and pe.get("file") and POOL.download(pe, src):
+        info = {"title": pe.get("title") or "", "channel": pe.get("channel") or "", "url": url}
+        print("POOL CLIP", pe.get("id"), flush=True)     # pre-fetched: no RapidAPI call
+    else:
+        info = download_url(url, src)
     if not info:
         raise CandidateRejected("no download (RapidAPI)")
     info = {**info, **{k: v for k, v in (info_hint or {}).items() if v}}
@@ -902,10 +911,23 @@ def query_plan(tried):
     return out
 
 
+POOL_DOC = None          # clip-pool manifest, loaded once per run (pipeline_lib/clip_pool.py)
+
+
+def _pool_mark(url, state, note=""):
+    """A pool clip is used once: mark it used (video made) or rejected (failed QC) and save the manifest."""
+    if POOL_DOC and POOL.set_state(POOL_DOC, url, state, note):
+        try:
+            POOL.save(POOL_DOC, Path("clips/_pool"))
+        except Exception as e:
+            print("pool manifest save failed (next run retries):", repr(e)[:120], flush=True)
+
+
 def _attempt(url, hint, query, used_urls, demo, n, link=False, track=None):
     try:
         src, info, dur, w, h = fetch_and_screen(url, hint, used_urls)
         ctx = build_draft(src, info, dur, w, h, query, demo, n, used_urls)
+        _pool_mark(url, "used")
         Path("rejects.json").write_text(json.dumps(REJECTS, indent=2))
         if link or track:
             link_queue.mark(url, track or "used", info.get("title", ""))
@@ -917,12 +939,14 @@ def _attempt(url, hint, query, used_urls, demo, n, link=False, track=None):
         REJECTS.append({"n": n, "query": query, "title": (hint or {}).get("title", "") or url, "channel": ch,
                         "reason": str(e)[:200]})
         print("CANDIDATE REJECTED:", e, flush=True)
+        _pool_mark(url, "rejected", str(e))
         if link or track:
             link_queue.mark(url, "rejected", str(e))
     except Exception as e:  # one bad source/tool step must not kill the whole run
         REJECTS.append({"n": n, "query": query, "title": (hint or {}).get("title", "") or url, "reason": "error: " + repr(e)[:180]})
         traceback.print_exc()
         print("CANDIDATE FAILED (trying next):", repr(e)[:300], flush=True)
+        _pool_mark(url, "rejected", "error: " + repr(e)[:120])
         if link or track:
             link_queue.mark(url, "rejected", "error: " + repr(e)[:150])
     return None
@@ -946,6 +970,26 @@ def build_with_candidates(tried, used_urls, demo):
         n += 1
         print(f"=== LINK {n}: {url}", flush=True)
         ctx = _attempt(url, {}, f"url:{url}", used_urls, demo, n, link=True)
+        if ctx:
+            return ctx
+    # 2b) pre-fetched clip pool (release clip-pool): no search / RapidAPI download needed
+    global POOL_DOC
+    try:
+        POOL_DOC = POOL.load(Path("clips/_pool"))
+    except Exception as e:
+        POOL_DOC = None
+        print("clip pool unavailable:", repr(e)[:120], flush=True)
+    forced_genre = os.environ.get("GENRE", "").strip().lower()
+    pool_entries = POOL.usable(POOL_DOC or {})
+    if forced_genre:
+        pool_entries = [e for e in pool_entries if e.get("genre") in (forced_genre, "trusted")]
+    random.shuffle(pool_entries)
+    for e in pool_entries[:6]:
+        if e["url"] in used_urls or channel_blocklist.is_blocked(e.get("channel") or ""):
+            continue
+        n += 1
+        print(f"=== POOL CLIP {n}: {e.get('title', '')[:80]} | {e.get('channel', '')}", flush=True)
+        ctx = _attempt(e["url"], e, f"pool:{e.get('genre')}", used_urls, demo, n)
         if ctx:
             return ctx
     # 3) trusted channels (channels/channels.txt): recent/popular scene clips, still pre-screened

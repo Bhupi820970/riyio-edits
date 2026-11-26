@@ -1,0 +1,56 @@
+name: clip-pool
+# Keep ~100 pre-fetched official source clips in the draft release "clip-pool" (scripts/clip_pool.py).
+# Refill starts when usable clips drop to 50 or below and runs back to ~100 (max 20 per run, so RapidAPI and
+# Actions minutes stay small). A run with nothing to do exits in under a minute. Errors are retried with
+# backoff inside the run; anything still missing is fetched by the next scheduled run (no manual step).
+# Triggers: schedule + owner dispatch only (no pull_request / pull_request_target).
+on:
+  schedule:
+    - cron: "40 */3 * * *"    # every 3 h at :10 IST
+  workflow_dispatch:
+    inputs:
+      max:
+        description: "max new clips this run"
+        default: "20"
+        required: false
+
+concurrency:
+  group: riyio-clip-pool
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  pool:
+    if: github.event_name == 'schedule' || github.actor == github.repository_owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.11"
+      - name: Install deps
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q ffmpeg
+          pip install -q "google-genai==3.6.1" "yt-dlp==2026.11.23" "requests==2.34.2"
+      - name: Refill clip pool
+        env:
+          YT_RAPIDAPI_KEY_1: ${{ secrets.YT_RAPIDAPI_KEY_1 }}
+          YT_RAPIDAPI_KEY_2: ${{ secrets.YT_RAPIDAPI_KEY_2 }}
+          YT_RAPIDAPI_KEY_3: ${{ secrets.YT_RAPIDAPI_KEY_3 }}
+          YT_RAPIDAPI_KEY_4: ${{ secrets.YT_RAPIDAPI_KEY_4 }}
+          RAPIDAPI_KEY_1: ${{ secrets.RAPIDAPI_KEY_1 }}
+          RAPIDAPI_KEY_2: ${{ secrets.RAPIDAPI_KEY_2 }}
+          RAPIDAPI_KEY_3: ${{ secrets.RAPIDAPI_KEY_3 }}
+          RAPIDAPI_KEY_4: ${{ secrets.RAPIDAPI_KEY_4 }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_API_KEY_1: ${{ secrets.GEMINI_API_KEY_1 }}
+          GEMINI_API_KEY_2: ${{ secrets.GEMINI_API_KEY_2 }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          MAX_NEW: ${{ inputs.max || '20' }}
+        run: |
+          case "$MAX_NEW" in ''|*[!0-9]*) MAX_NEW=20;; esac
+          python -u scripts/clip_pool.py refill --max "$MAX_NEW" --budget-min 150

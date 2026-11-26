@@ -26,6 +26,7 @@ Without that variable, every run is demo-only and nothing is posted.
 |---|---|
 | `.github/workflows/riyio-v2.yml` → `run_v2.py` | The main pipeline:<br>• picks a source (`links/queue.txt`, `inbox/links/queue.json`, the `source_url` input, or search);<br>• picks montage shots (`config/shot_library.json` reuses good shots per title; no repeats in one video);<br>• picks a song by mood and tempo from `songs-bank`, least recently used first (`config/used_songs.json`);<br>• renders 4K with captions (P01–P20);<br>• uploads to the `media-cache` release, and posts through Buffer and YouTube only when not demo.<br>Dispatch inputs: `demo_only` (default true), `source_url`, `genre`. |
 | `.github/workflows/sync_songs.yml` → `scripts/sync_songs_bank.py` | Downloads songs from `config/songs_catalog.json` that are missing from `songs-bank` (RapidAPI with key rotation), uploads them to the release, and writes BPM and mood tags. Inputs: `limit`, `budget_min` (default 300 min). A re-run continues where the last one stopped. |
+| `.github/workflows/clip-pool.yml` → `scripts/clip_pool.py` | Every 3 h. Keeps about **100** pre-downloaded official source clips (at least 1080p, 30 s or longer, pre-screened for subtitles, logos and watermarks) in the draft release **`clip-pool`** (`pool.json` lists them). Refill starts when usable clips drop to **50 or below**, adding at most 20 per run. Errors are retried with backoff, and the next run continues. `riyio-v2` tries pool clips first, without a RapidAPI download, and marks each one `used` or `rejected`, so a clip is never used twice. |
 | `scripts/tag_songs.py` | Tags library songs (BPM and mood) into `config/song_tags.json`. |
 | `.github/workflows/produce.yml` → `run_real.py` | Legacy, manual only. |
 | `pipeline_lib/`, `pipeline.py`, `vicestyle.py`, `remotion/` | Render code (Python plus the Remotion caption layer). |
@@ -36,7 +37,7 @@ Without that variable, every run is demo-only and nothing is posted.
 |---|---|
 | Posting | `BUFFER_ACCESS_TOKEN` |
 | AI | `GEMINI_API_KEY`, `GEMINI_API_KEY_1`, `GEMINI_API_KEY_2`, `GROQ_API_KEY`, `GROQ_API_KEY_1` … `_4`, `OPENROUTER_API_KEY` |
-| Downloads / search | `RAPIDAPI_KEY_1` … `_4`, `YT_RAPIDAPI_KEY_1` … `_4`, `YT_COOKIES` |
+| Downloads / search | `RAPIDAPI_KEY_1` … `_4`, `YT_RAPIDAPI_KEY_1` … `_4`, `YT_COOKIES` (optional YouTube browser login for runner downloads) |
 | Built in | `GITHUB_TOKEN` (automatic) |
 
 Repo variable: `RIYIO_AUTO_PUBLISH`.
@@ -51,6 +52,8 @@ Repo variable: `RIYIO_AUTO_PUBLISH`.
 | Shot library | `config/shot_library.json` |
 | Rejected channels | `config/rejected_channels.json` |
 | Rendered videos | Release **`media-cache`** |
+| Clip pool | Release **`clip-pool`** (`pool.json`: ready / used / rejected) |
+| Song swaps | `config/songs_refetch.json` (songs to download again), `config/songs_alternates.json` (backup famous originals for dark and epic) |
 | Source links queue | `links/queue.txt`, `links/used.txt`, `inbox/links/queue.json` |
 | Post history | `history.json` |
 | Allowed channels | `channels/channels.txt` |
@@ -63,12 +66,11 @@ Nothing has to run on a computer.
 
 ## 6. Known issues (2026-11-26)
 
-- **Songs-bank is incomplete: 260 of 360 at 21:10 IST.**
-  - Complete: romance, hype, aggressive and emotional (60/60 each).
-  - **Missing: dark 50 and epic 50** (10/60 each).
-  - The sync run `45839233344` (started 19:57 IST, 300-min budget) was still running at 21:10. If it stops before finishing, dispatch **Sync songs-bank** again; it only fetches the songs that are still missing.
-  - Until then, dark and epic scenes have only 10 songs each, so songs repeat sooner.
-- **`romance_10.mp3`, "Danza Kuduro (Slowed)" by Don Omar, is a slowed fan edit, not the original.** Swap it for the original "Danza Kuduro" (or another original romance song) in `config/songs_catalog.json`, delete that one asset from `songs-bank`, and re-run the sync.
+- **Songs-bank is incomplete.** At 21:10 IST on 2026-11-26 it had 260 of 360 songs: dark and epic are at 10 of 60 each; the other four moods are complete.
+  - Sync run `45839233344` (started 19:57 IST) was still running, and a second sync is queued right behind it.
+  - From now on, if a catalog song can't be found as an official upload, the sync tries up to 3 famous originals of the same mood from `config/songs_alternates.json` (29 dark, 32 epic). It updates the catalog and notes the old song under `replaced`.
+- **`romance_10.mp3` (fixed in the catalog).** It was "Danza Kuduro (Slowed)", a slowed fan edit. It is now the original "Danza Kuduro" by Don Omar & Lucenzo, from the official upload.
+  - The next sync downloads it again and overwrites the old file; `config/songs_refetch.json` lists it until that succeeds.
 - **Auto-post off:** see section 1.
 - **Reference videos:** `ref1.mp4` and `ref2.mp4`, used for the look in `docs/REFERENCE_STYLE.md`, are not in git.
 - **Quotas:** RapidAPI and Gemini are free tiers. When all keys hit their limit, the song sync and searches slow down. The keys rotate automatically.
