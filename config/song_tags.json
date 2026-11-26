@@ -190,5 +190,10 @@
   "bpm": 152.0,
   "rms": 0.2235,
   "drop_s": 114.68
+ },
+ "romance_10.mp3": {
+  "mood": "romance",
+  "bpm": 103.4,
+  "drop_s": 94.37
  }
 }
