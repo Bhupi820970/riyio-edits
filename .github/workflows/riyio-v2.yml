@@ -153,7 +153,7 @@ jobs:
       - name: Save learned blocklist + used links
         if: always()
         run: |
-          git add config/rejected_channels.json links/used.txt config/song_tags.json config/shot_library.json
+          touch config/used_songs.json && git add config/rejected_channels.json links/used.txt config/song_tags.json config/shot_library.json config/used_songs.json
           if ! git diff --cached --quiet; then
             git -c user.name=bibi-bot -c user.email=bot@users.noreply.github.com commit -m "chore: riyio run ${{ github.run_number }} learned channels / used links / song tags / shot library"
             for i in 1 2 3; do

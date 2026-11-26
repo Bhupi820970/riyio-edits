@@ -1,69 +1,2164 @@
 {
   "songs": [
-    {"file": "dark_1.mp3", "mood": "dark", "title": "Memory Reboot", "artist": "VØJ, Narvent"},
-    {"file": "dark_2.mp3", "mood": "dark", "title": "After Dark", "artist": "Mr.Kitty"},
-    {"file": "dark_3.mp3", "mood": "dark", "title": "Fainted", "artist": "Narvent"},
-    {"file": "dark_4.mp3", "mood": "dark", "title": "Dark Beach", "artist": "Pastel Ghost"},
-    {"file": "dark_5.mp3", "mood": "dark", "title": "The Perfect Girl", "artist": "Mareux"},
-    {"file": "dark_6.mp3", "mood": "dark", "title": "Resonance", "artist": "HOME"},
-    {"file": "dark_7.mp3", "mood": "dark", "title": "Sweater Weather", "artist": "The Neighbourhood"},
-    {"file": "dark_8.mp3", "mood": "dark", "title": "Gangsta's Paradise", "artist": "Coolio"},
-    {"file": "dark_9.mp3", "mood": "dark", "title": "Red Right Hand", "artist": "Nick Cave & The Bad Seeds"},
-    {"file": "dark_10.mp3", "mood": "dark", "title": "Do I Wanna Know?", "artist": "Arctic Monkeys"},
-
-    {"file": "epic_1.mp3", "mood": "epic", "title": "Little Dark Age", "artist": "MGMT"},
-    {"file": "epic_2.mp3", "mood": "epic", "title": "Solitude (Felsmann + Tiley)", "artist": "M83"},
-    {"file": "epic_3.mp3", "mood": "epic", "title": "We Are The People", "artist": "Empire of the Sun"},
-    {"file": "epic_4.mp3", "mood": "epic", "title": "Cornfield Chase", "artist": "Hans Zimmer"},
-    {"file": "epic_5.mp3", "mood": "epic", "title": "Time", "artist": "Hans Zimmer"},
-    {"file": "epic_6.mp3", "mood": "epic", "title": "Outro", "artist": "M83"},
-    {"file": "epic_7.mp3", "mood": "epic", "title": "My Tears Are Becoming A Sea", "artist": "M83"},
-    {"file": "epic_8.mp3", "mood": "epic", "title": "Viva La Vida", "artist": "Coldplay"},
-    {"file": "epic_9.mp3", "mood": "epic", "title": "Skyfall", "artist": "Adele"},
-    {"file": "epic_10.mp3", "mood": "epic", "title": "Way Down We Go", "artist": "KALEO"},
-
-    {"file": "emotional_1.mp3", "mood": "emotional", "title": "Experience", "artist": "Ludovico Einaudi"},
-    {"file": "emotional_2.mp3", "mood": "emotional", "title": "Space Song", "artist": "Beach House"},
-    {"file": "emotional_3.mp3", "mood": "emotional", "title": "snowfall", "artist": "Øneheart x reidenshi"},
-    {"file": "emotional_4.mp3", "mood": "emotional", "title": "Another Love", "artist": "Tom Odell"},
-    {"file": "emotional_5.mp3", "mood": "emotional", "title": "Past Lives", "artist": "BØRNS"},
-    {"file": "emotional_6.mp3", "mood": "emotional", "title": "Idea 10", "artist": "Gibran Alcocer"},
-    {"file": "emotional_7.mp3", "mood": "emotional", "title": "Glimpse of Us", "artist": "Joji"},
-    {"file": "emotional_8.mp3", "mood": "emotional", "title": "Where's My Love", "artist": "SYML"},
-    {"file": "emotional_9.mp3", "mood": "emotional", "title": "Je te laisserai des mots", "artist": "Patrick Watson"},
-    {"file": "emotional_10.mp3", "mood": "emotional", "title": "Daylight", "artist": "David Kushner"},
-
-    {"file": "aggressive_1.mp3", "mood": "aggressive", "title": "Kerosene", "artist": "Crystal Castles"},
-    {"file": "aggressive_2.mp3", "mood": "aggressive", "title": "METAMORPHOSIS", "artist": "INTERWORLD"},
-    {"file": "aggressive_3.mp3", "mood": "aggressive", "title": "Close Eyes", "artist": "DVRST"},
-    {"file": "aggressive_4.mp3", "mood": "aggressive", "title": "Murder In My Mind", "artist": "KORDHELL"},
-    {"file": "aggressive_5.mp3", "mood": "aggressive", "title": "Sahara", "artist": "Hensonn"},
-    {"file": "aggressive_6.mp3", "mood": "aggressive", "title": "Rapture", "artist": "INTERWORLD"},
-    {"file": "aggressive_7.mp3", "mood": "aggressive", "title": "Neon Blade", "artist": "MoonDeity"},
-    {"file": "aggressive_8.mp3", "mood": "aggressive", "title": "Override", "artist": "KSLV Noh"},
-    {"file": "aggressive_9.mp3", "mood": "aggressive", "title": "GigaChad Theme (Phonk House)", "artist": "g3ox_em"},
-    {"file": "aggressive_10.mp3", "mood": "aggressive", "title": "Montagem Mysterious Game", "artist": "LXNGVX"},
-
-    {"file": "hype_1.mp3", "mood": "hype", "title": "FE!N", "artist": "Travis Scott"},
-    {"file": "hype_2.mp3", "mood": "hype", "title": "Praise God", "artist": "Kanye West"},
-    {"file": "hype_3.mp3", "mood": "hype", "title": "Midnight City", "artist": "M83"},
-    {"file": "hype_4.mp3", "mood": "hype", "title": "Blinding Lights", "artist": "The Weeknd"},
-    {"file": "hype_5.mp3", "mood": "hype", "title": "Starboy", "artist": "The Weeknd"},
-    {"file": "hype_6.mp3", "mood": "hype", "title": "Timeless", "artist": "The Weeknd & Playboi Carti"},
-    {"file": "hype_7.mp3", "mood": "hype", "title": "Goosebumps", "artist": "Travis Scott"},
-    {"file": "hype_8.mp3", "mood": "hype", "title": "Mockingbird", "artist": "Eminem"},
-    {"file": "hype_9.mp3", "mood": "hype", "title": "Till I Collapse", "artist": "Eminem"},
-    {"file": "hype_10.mp3", "mood": "hype", "title": "Band4Band", "artist": "Central Cee & Lil Baby"},
-
-    {"file": "romance_1.mp3", "mood": "romance", "title": "Apocalypse", "artist": "Cigarettes After Sex"},
-    {"file": "romance_2.mp3", "mood": "romance", "title": "The Night We Met", "artist": "Lord Huron"},
-    {"file": "romance_3.mp3", "mood": "romance", "title": "My Love Mine All Mine", "artist": "Mitski"},
-    {"file": "romance_4.mp3", "mood": "romance", "title": "Sunsetz", "artist": "Cigarettes After Sex"},
-    {"file": "romance_5.mp3", "mood": "romance", "title": "Cry", "artist": "Cigarettes After Sex"},
-    {"file": "romance_6.mp3", "mood": "romance", "title": "Dandelions", "artist": "Ruth B."},
-    {"file": "romance_7.mp3", "mood": "romance", "title": "Until I Found You", "artist": "Stephen Sanchez"},
-    {"file": "romance_8.mp3", "mood": "romance", "title": "I Wanna Be Yours", "artist": "Arctic Monkeys"},
-    {"file": "romance_9.mp3", "mood": "romance", "title": "Blue", "artist": "Yung Kai"},
-    {"file": "romance_10.mp3", "mood": "romance", "title": "Danza Kuduro (Slowed)", "artist": "Don Omar"}
+    {
+      "file": "dark_1.mp3",
+      "mood": "dark",
+      "title": "Memory Reboot",
+      "artist": "VØJ, Narvent"
+    },
+    {
+      "file": "dark_2.mp3",
+      "mood": "dark",
+      "title": "After Dark",
+      "artist": "Mr.Kitty"
+    },
+    {
+      "file": "dark_3.mp3",
+      "mood": "dark",
+      "title": "Fainted",
+      "artist": "Narvent"
+    },
+    {
+      "file": "dark_4.mp3",
+      "mood": "dark",
+      "title": "Dark Beach",
+      "artist": "Pastel Ghost"
+    },
+    {
+      "file": "dark_5.mp3",
+      "mood": "dark",
+      "title": "The Perfect Girl",
+      "artist": "Mareux"
+    },
+    {
+      "file": "dark_6.mp3",
+      "mood": "dark",
+      "title": "Resonance",
+      "artist": "HOME"
+    },
+    {
+      "file": "dark_7.mp3",
+      "mood": "dark",
+      "title": "Sweater Weather",
+      "artist": "The Neighbourhood"
+    },
+    {
+      "file": "dark_8.mp3",
+      "mood": "dark",
+      "title": "Gangsta's Paradise",
+      "artist": "Coolio"
+    },
+    {
+      "file": "dark_9.mp3",
+      "mood": "dark",
+      "title": "Red Right Hand",
+      "artist": "Nick Cave & The Bad Seeds"
+    },
+    {
+      "file": "dark_10.mp3",
+      "mood": "dark",
+      "title": "Do I Wanna Know?",
+      "artist": "Arctic Monkeys"
+    },
+    {
+      "file": "epic_1.mp3",
+      "mood": "epic",
+      "title": "Little Dark Age",
+      "artist": "MGMT"
+    },
+    {
+      "file": "epic_2.mp3",
+      "mood": "epic",
+      "title": "Solitude (Felsmann + Tiley)",
+      "artist": "M83"
+    },
+    {
+      "file": "epic_3.mp3",
+      "mood": "epic",
+      "title": "We Are The People",
+      "artist": "Empire of the Sun"
+    },
+    {
+      "file": "epic_4.mp3",
+      "mood": "epic",
+      "title": "Cornfield Chase",
+      "artist": "Hans Zimmer"
+    },
+    {
+      "file": "epic_5.mp3",
+      "mood": "epic",
+      "title": "Time",
+      "artist": "Hans Zimmer"
+    },
+    {
+      "file": "epic_6.mp3",
+      "mood": "epic",
+      "title": "Outro",
+      "artist": "M83"
+    },
+    {
+      "file": "epic_7.mp3",
+      "mood": "epic",
+      "title": "My Tears Are Becoming A Sea",
+      "artist": "M83"
+    },
+    {
+      "file": "epic_8.mp3",
+      "mood": "epic",
+      "title": "Viva La Vida",
+      "artist": "Coldplay"
+    },
+    {
+      "file": "epic_9.mp3",
+      "mood": "epic",
+      "title": "Skyfall",
+      "artist": "Adele"
+    },
+    {
+      "file": "epic_10.mp3",
+      "mood": "epic",
+      "title": "Way Down We Go",
+      "artist": "KALEO"
+    },
+    {
+      "file": "emotional_1.mp3",
+      "mood": "emotional",
+      "title": "Experience",
+      "artist": "Ludovico Einaudi"
+    },
+    {
+      "file": "emotional_2.mp3",
+      "mood": "emotional",
+      "title": "Space Song",
+      "artist": "Beach House"
+    },
+    {
+      "file": "emotional_3.mp3",
+      "mood": "emotional",
+      "title": "snowfall",
+      "artist": "Øneheart x reidenshi"
+    },
+    {
+      "file": "emotional_4.mp3",
+      "mood": "emotional",
+      "title": "Another Love",
+      "artist": "Tom Odell"
+    },
+    {
+      "file": "emotional_5.mp3",
+      "mood": "emotional",
+      "title": "Past Lives",
+      "artist": "BØRNS"
+    },
+    {
+      "file": "emotional_6.mp3",
+      "mood": "emotional",
+      "title": "Idea 10",
+      "artist": "Gibran Alcocer"
+    },
+    {
+      "file": "emotional_7.mp3",
+      "mood": "emotional",
+      "title": "Glimpse of Us",
+      "artist": "Joji"
+    },
+    {
+      "file": "emotional_8.mp3",
+      "mood": "emotional",
+      "title": "Where's My Love",
+      "artist": "SYML"
+    },
+    {
+      "file": "emotional_9.mp3",
+      "mood": "emotional",
+      "title": "Je te laisserai des mots",
+      "artist": "Patrick Watson"
+    },
+    {
+      "file": "emotional_10.mp3",
+      "mood": "emotional",
+      "title": "Daylight",
+      "artist": "David Kushner"
+    },
+    {
+      "file": "aggressive_1.mp3",
+      "mood": "aggressive",
+      "title": "Kerosene",
+      "artist": "Crystal Castles"
+    },
+    {
+      "file": "aggressive_2.mp3",
+      "mood": "aggressive",
+      "title": "METAMORPHOSIS",
+      "artist": "INTERWORLD"
+    },
+    {
+      "file": "aggressive_3.mp3",
+      "mood": "aggressive",
+      "title": "Close Eyes",
+      "artist": "DVRST"
+    },
+    {
+      "file": "aggressive_4.mp3",
+      "mood": "aggressive",
+      "title": "Murder In My Mind",
+      "artist": "KORDHELL"
+    },
+    {
+      "file": "aggressive_5.mp3",
+      "mood": "aggressive",
+      "title": "Sahara",
+      "artist": "Hensonn"
+    },
+    {
+      "file": "aggressive_6.mp3",
+      "mood": "aggressive",
+      "title": "Rapture",
+      "artist": "INTERWORLD"
+    },
+    {
+      "file": "aggressive_7.mp3",
+      "mood": "aggressive",
+      "title": "Neon Blade",
+      "artist": "MoonDeity"
+    },
+    {
+      "file": "aggressive_8.mp3",
+      "mood": "aggressive",
+      "title": "Override",
+      "artist": "KSLV Noh"
+    },
+    {
+      "file": "aggressive_9.mp3",
+      "mood": "aggressive",
+      "title": "GigaChad Theme (Phonk House)",
+      "artist": "g3ox_em"
+    },
+    {
+      "file": "aggressive_10.mp3",
+      "mood": "aggressive",
+      "title": "Montagem Mysterious Game",
+      "artist": "LXNGVX"
+    },
+    {
+      "file": "hype_1.mp3",
+      "mood": "hype",
+      "title": "FE!N",
+      "artist": "Travis Scott"
+    },
+    {
+      "file": "hype_2.mp3",
+      "mood": "hype",
+      "title": "Praise God",
+      "artist": "Kanye West"
+    },
+    {
+      "file": "hype_3.mp3",
+      "mood": "hype",
+      "title": "Midnight City",
+      "artist": "M83"
+    },
+    {
+      "file": "hype_4.mp3",
+      "mood": "hype",
+      "title": "Blinding Lights",
+      "artist": "The Weeknd"
+    },
+    {
+      "file": "hype_5.mp3",
+      "mood": "hype",
+      "title": "Starboy",
+      "artist": "The Weeknd"
+    },
+    {
+      "file": "hype_6.mp3",
+      "mood": "hype",
+      "title": "Timeless",
+      "artist": "The Weeknd & Playboi Carti"
+    },
+    {
+      "file": "hype_7.mp3",
+      "mood": "hype",
+      "title": "Goosebumps",
+      "artist": "Travis Scott"
+    },
+    {
+      "file": "hype_8.mp3",
+      "mood": "hype",
+      "title": "Mockingbird",
+      "artist": "Eminem"
+    },
+    {
+      "file": "hype_9.mp3",
+      "mood": "hype",
+      "title": "Till I Collapse",
+      "artist": "Eminem"
+    },
+    {
+      "file": "hype_10.mp3",
+      "mood": "hype",
+      "title": "Band4Band",
+      "artist": "Central Cee & Lil Baby"
+    },
+    {
+      "file": "romance_1.mp3",
+      "mood": "romance",
+      "title": "Apocalypse",
+      "artist": "Cigarettes After Sex"
+    },
+    {
+      "file": "romance_2.mp3",
+      "mood": "romance",
+      "title": "The Night We Met",
+      "artist": "Lord Huron"
+    },
+    {
+      "file": "romance_3.mp3",
+      "mood": "romance",
+      "title": "My Love Mine All Mine",
+      "artist": "Mitski"
+    },
+    {
+      "file": "romance_4.mp3",
+      "mood": "romance",
+      "title": "Sunsetz",
+      "artist": "Cigarettes After Sex"
+    },
+    {
+      "file": "romance_5.mp3",
+      "mood": "romance",
+      "title": "Cry",
+      "artist": "Cigarettes After Sex"
+    },
+    {
+      "file": "romance_6.mp3",
+      "mood": "romance",
+      "title": "Dandelions",
+      "artist": "Ruth B."
+    },
+    {
+      "file": "romance_7.mp3",
+      "mood": "romance",
+      "title": "Until I Found You",
+      "artist": "Stephen Sanchez"
+    },
+    {
+      "file": "romance_8.mp3",
+      "mood": "romance",
+      "title": "I Wanna Be Yours",
+      "artist": "Arctic Monkeys"
+    },
+    {
+      "file": "romance_9.mp3",
+      "mood": "romance",
+      "title": "Blue",
+      "artist": "Yung Kai"
+    },
+    {
+      "file": "romance_10.mp3",
+      "mood": "romance",
+      "title": "Danza Kuduro (Slowed)",
+      "artist": "Don Omar"
+    },
+    {
+      "file": "romance_11.mp3",
+      "mood": "romance",
+      "title": "Perfect",
+      "artist": "Ed Sheeran"
+    },
+    {
+      "file": "romance_12.mp3",
+      "mood": "romance",
+      "title": "Thinking Out Loud",
+      "artist": "Ed Sheeran"
+    },
+    {
+      "file": "romance_13.mp3",
+      "mood": "romance",
+      "title": "Photograph",
+      "artist": "Ed Sheeran"
+    },
+    {
+      "file": "romance_14.mp3",
+      "mood": "romance",
+      "title": "All of Me",
+      "artist": "John Legend"
+    },
+    {
+      "file": "romance_15.mp3",
+      "mood": "romance",
+      "title": "Just the Way You Are",
+      "artist": "Bruno Mars"
+    },
+    {
+      "file": "romance_16.mp3",
+      "mood": "romance",
+      "title": "Die With A Smile",
+      "artist": "Lady Gaga & Bruno Mars"
+    },
+    {
+      "file": "romance_17.mp3",
+      "mood": "romance",
+      "title": "Talking to the Moon",
+      "artist": "Bruno Mars"
+    },
+    {
+      "file": "romance_18.mp3",
+      "mood": "romance",
+      "title": "Treasure",
+      "artist": "Bruno Mars"
+    },
+    {
+      "file": "romance_19.mp3",
+      "mood": "romance",
+      "title": "A Thousand Years",
+      "artist": "Christina Perri"
+    },
+    {
+      "file": "romance_20.mp3",
+      "mood": "romance",
+      "title": "Can't Help Falling in Love",
+      "artist": "Elvis Presley"
+    },
+    {
+      "file": "romance_21.mp3",
+      "mood": "romance",
+      "title": "Lover",
+      "artist": "Taylor Swift"
+    },
+    {
+      "file": "romance_22.mp3",
+      "mood": "romance",
+      "title": "Love Story",
+      "artist": "Taylor Swift"
+    },
+    {
+      "file": "romance_23.mp3",
+      "mood": "romance",
+      "title": "Enchanted",
+      "artist": "Taylor Swift"
+    },
+    {
+      "file": "romance_24.mp3",
+      "mood": "romance",
+      "title": "Yellow",
+      "artist": "Coldplay"
+    },
+    {
+      "file": "romance_25.mp3",
+      "mood": "romance",
+      "title": "Adore You",
+      "artist": "Harry Styles"
+    },
+    {
+      "file": "romance_26.mp3",
+      "mood": "romance",
+      "title": "Golden Hour",
+      "artist": "JVKE"
+    },
+    {
+      "file": "romance_27.mp3",
+      "mood": "romance",
+      "title": "Line Without a Hook",
+      "artist": "Ricky Montgomery"
+    },
+    {
+      "file": "romance_28.mp3",
+      "mood": "romance",
+      "title": "Those Eyes",
+      "artist": "New West"
+    },
+    {
+      "file": "romance_29.mp3",
+      "mood": "romance",
+      "title": "Here With Me",
+      "artist": "d4vd"
+    },
+    {
+      "file": "romance_30.mp3",
+      "mood": "romance",
+      "title": "Iris",
+      "artist": "The Goo Goo Dolls"
+    },
+    {
+      "file": "romance_31.mp3",
+      "mood": "romance",
+      "title": "Lucky",
+      "artist": "Jason Mraz & Colbie Caillat"
+    },
+    {
+      "file": "romance_32.mp3",
+      "mood": "romance",
+      "title": "Make You Feel My Love",
+      "artist": "Adele"
+    },
+    {
+      "file": "romance_33.mp3",
+      "mood": "romance",
+      "title": "Kiss Me",
+      "artist": "Sixpence None the Richer"
+    },
+    {
+      "file": "romance_34.mp3",
+      "mood": "romance",
+      "title": "Electric Love",
+      "artist": "BØRNS"
+    },
+    {
+      "file": "romance_35.mp3",
+      "mood": "romance",
+      "title": "Best Part",
+      "artist": "Daniel Caesar & H.E.R."
+    },
+    {
+      "file": "romance_36.mp3",
+      "mood": "romance",
+      "title": "Get You",
+      "artist": "Daniel Caesar"
+    },
+    {
+      "file": "romance_37.mp3",
+      "mood": "romance",
+      "title": "Snooze",
+      "artist": "SZA"
+    },
+    {
+      "file": "romance_38.mp3",
+      "mood": "romance",
+      "title": "Pink + White",
+      "artist": "Frank Ocean"
+    },
+    {
+      "file": "romance_39.mp3",
+      "mood": "romance",
+      "title": "Thinkin Bout You",
+      "artist": "Frank Ocean"
+    },
+    {
+      "file": "romance_40.mp3",
+      "mood": "romance",
+      "title": "Lovely Day",
+      "artist": "Bill Withers"
+    },
+    {
+      "file": "romance_41.mp3",
+      "mood": "romance",
+      "title": "At Last",
+      "artist": "Etta James"
+    },
+    {
+      "file": "romance_42.mp3",
+      "mood": "romance",
+      "title": "Just the Two of Us",
+      "artist": "Grover Washington Jr. & Bill Withers"
+    },
+    {
+      "file": "romance_43.mp3",
+      "mood": "romance",
+      "title": "Stand By Me",
+      "artist": "Ben E. King"
+    },
+    {
+      "file": "romance_44.mp3",
+      "mood": "romance",
+      "title": "Can't Take My Eyes Off You",
+      "artist": "Frankie Valli"
+    },
+    {
+      "file": "romance_45.mp3",
+      "mood": "romance",
+      "title": "Fly Me to the Moon",
+      "artist": "Frank Sinatra"
+    },
+    {
+      "file": "romance_46.mp3",
+      "mood": "romance",
+      "title": "Night Changes",
+      "artist": "One Direction"
+    },
+    {
+      "file": "romance_47.mp3",
+      "mood": "romance",
+      "title": "Little Things",
+      "artist": "One Direction"
+    },
+    {
+      "file": "romance_48.mp3",
+      "mood": "romance",
+      "title": "Say You Won't Let Go",
+      "artist": "James Arthur"
+    },
+    {
+      "file": "romance_49.mp3",
+      "mood": "romance",
+      "title": "Rewrite the Stars",
+      "artist": "Zac Efron & Zendaya"
+    },
+    {
+      "file": "romance_50.mp3",
+      "mood": "romance",
+      "title": "Señorita",
+      "artist": "Shawn Mendes & Camila Cabello"
+    },
+    {
+      "file": "romance_51.mp3",
+      "mood": "romance",
+      "title": "Love Me Like You Do",
+      "artist": "Ellie Goulding"
+    },
+    {
+      "file": "romance_52.mp3",
+      "mood": "romance",
+      "title": "Paris in the Rain",
+      "artist": "Lauv"
+    },
+    {
+      "file": "romance_53.mp3",
+      "mood": "romance",
+      "title": "I Like Me Better",
+      "artist": "Lauv"
+    },
+    {
+      "file": "romance_54.mp3",
+      "mood": "romance",
+      "title": "505",
+      "artist": "Arctic Monkeys"
+    },
+    {
+      "file": "romance_55.mp3",
+      "mood": "romance",
+      "title": "Lovers Rock",
+      "artist": "TV Girl"
+    },
+    {
+      "file": "romance_56.mp3",
+      "mood": "romance",
+      "title": "Tum Hi Ho",
+      "artist": "Arijit Singh"
+    },
+    {
+      "file": "romance_57.mp3",
+      "mood": "romance",
+      "title": "Kesariya",
+      "artist": "Arijit Singh"
+    },
+    {
+      "file": "romance_58.mp3",
+      "mood": "romance",
+      "title": "Raataan Lambiyan",
+      "artist": "Jubin Nautiyal & Asees Kaur"
+    },
+    {
+      "file": "romance_59.mp3",
+      "mood": "romance",
+      "title": "Apna Bana Le",
+      "artist": "Arijit Singh"
+    },
+    {
+      "file": "romance_60.mp3",
+      "mood": "romance",
+      "title": "Pehle Bhi Main",
+      "artist": "Vishal Mishra"
+    },
+    {
+      "file": "hype_11.mp3",
+      "mood": "hype",
+      "title": "SICKO MODE",
+      "artist": "Travis Scott"
+    },
+    {
+      "file": "hype_12.mp3",
+      "mood": "hype",
+      "title": "HIGHEST IN THE ROOM",
+      "artist": "Travis Scott"
+    },
+    {
+      "file": "hype_13.mp3",
+      "mood": "hype",
+      "title": "Antidote",
+      "artist": "Travis Scott"
+    },
+    {
+      "file": "hype_14.mp3",
+      "mood": "hype",
+      "title": "HUMBLE.",
+      "artist": "Kendrick Lamar"
+    },
+    {
+      "file": "hype_15.mp3",
+      "mood": "hype",
+      "title": "DNA.",
+      "artist": "Kendrick Lamar"
+    },
+    {
+      "file": "hype_16.mp3",
+      "mood": "hype",
+      "title": "Not Like Us",
+      "artist": "Kendrick Lamar"
+    },
+    {
+      "file": "hype_17.mp3",
+      "mood": "hype",
+      "title": "Lose Yourself",
+      "artist": "Eminem"
+    },
+    {
+      "file": "hype_18.mp3",
+      "mood": "hype",
+      "title": "Without Me",
+      "artist": "Eminem"
+    },
+    {
+      "file": "hype_19.mp3",
+      "mood": "hype",
+      "title": "The Real Slim Shady",
+      "artist": "Eminem"
+    },
+    {
+      "file": "hype_20.mp3",
+      "mood": "hype",
+      "title": "Rap God",
+      "artist": "Eminem"
+    },
+    {
+      "file": "hype_21.mp3",
+      "mood": "hype",
+      "title": "POWER",
+      "artist": "Kanye West"
+    },
+    {
+      "file": "hype_22.mp3",
+      "mood": "hype",
+      "title": "Stronger",
+      "artist": "Kanye West"
+    },
+    {
+      "file": "hype_23.mp3",
+      "mood": "hype",
+      "title": "Gold Digger",
+      "artist": "Kanye West"
+    },
+    {
+      "file": "hype_24.mp3",
+      "mood": "hype",
+      "title": "Black Skinhead",
+      "artist": "Kanye West"
+    },
+    {
+      "file": "hype_25.mp3",
+      "mood": "hype",
+      "title": "Carnival",
+      "artist": "Kanye West & Ty Dolla $ign"
+    },
+    {
+      "file": "hype_26.mp3",
+      "mood": "hype",
+      "title": "Can't Hold Us",
+      "artist": "Macklemore & Ryan Lewis"
+    },
+    {
+      "file": "hype_27.mp3",
+      "mood": "hype",
+      "title": "Believer",
+      "artist": "Imagine Dragons"
+    },
+    {
+      "file": "hype_28.mp3",
+      "mood": "hype",
+      "title": "Thunder",
+      "artist": "Imagine Dragons"
+    },
+    {
+      "file": "hype_29.mp3",
+      "mood": "hype",
+      "title": "Uptown Funk",
+      "artist": "Mark Ronson & Bruno Mars"
+    },
+    {
+      "file": "hype_30.mp3",
+      "mood": "hype",
+      "title": "Levitating",
+      "artist": "Dua Lipa"
+    },
+    {
+      "file": "hype_31.mp3",
+      "mood": "hype",
+      "title": "Don't Start Now",
+      "artist": "Dua Lipa"
+    },
+    {
+      "file": "hype_32.mp3",
+      "mood": "hype",
+      "title": "Save Your Tears",
+      "artist": "The Weeknd"
+    },
+    {
+      "file": "hype_33.mp3",
+      "mood": "hype",
+      "title": "The Hills",
+      "artist": "The Weeknd"
+    },
+    {
+      "file": "hype_34.mp3",
+      "mood": "hype",
+      "title": "Heartless",
+      "artist": "The Weeknd"
+    },
+    {
+      "file": "hype_35.mp3",
+      "mood": "hype",
+      "title": "Mo Bamba",
+      "artist": "Sheck Wes"
+    },
+    {
+      "file": "hype_36.mp3",
+      "mood": "hype",
+      "title": "rockstar",
+      "artist": "Post Malone & 21 Savage"
+    },
+    {
+      "file": "hype_37.mp3",
+      "mood": "hype",
+      "title": "Circles",
+      "artist": "Post Malone"
+    },
+    {
+      "file": "hype_38.mp3",
+      "mood": "hype",
+      "title": "Sunflower",
+      "artist": "Post Malone & Swae Lee"
+    },
+    {
+      "file": "hype_39.mp3",
+      "mood": "hype",
+      "title": "God's Plan",
+      "artist": "Drake"
+    },
+    {
+      "file": "hype_40.mp3",
+      "mood": "hype",
+      "title": "Rich Flex",
+      "artist": "Drake & 21 Savage"
+    },
+    {
+      "file": "hype_41.mp3",
+      "mood": "hype",
+      "title": "Jimmy Cooks",
+      "artist": "Drake & 21 Savage"
+    },
+    {
+      "file": "hype_42.mp3",
+      "mood": "hype",
+      "title": "INDUSTRY BABY",
+      "artist": "Lil Nas X & Jack Harlow"
+    },
+    {
+      "file": "hype_43.mp3",
+      "mood": "hype",
+      "title": "MONTERO (Call Me By Your Name)",
+      "artist": "Lil Nas X"
+    },
+    {
+      "file": "hype_44.mp3",
+      "mood": "hype",
+      "title": "Old Town Road",
+      "artist": "Lil Nas X"
+    },
+    {
+      "file": "hype_45.mp3",
+      "mood": "hype",
+      "title": "STAY",
+      "artist": "The Kid LAROI & Justin Bieber"
+    },
+    {
+      "file": "hype_46.mp3",
+      "mood": "hype",
+      "title": "In Da Club",
+      "artist": "50 Cent"
+    },
+    {
+      "file": "hype_47.mp3",
+      "mood": "hype",
+      "title": "Mask Off",
+      "artist": "Future"
+    },
+    {
+      "file": "hype_48.mp3",
+      "mood": "hype",
+      "title": "Bad and Boujee",
+      "artist": "Migos"
+    },
+    {
+      "file": "hype_49.mp3",
+      "mood": "hype",
+      "title": "Paint The Town Red",
+      "artist": "Doja Cat"
+    },
+    {
+      "file": "hype_50.mp3",
+      "mood": "hype",
+      "title": "Pump It",
+      "artist": "Black Eyed Peas"
+    },
+    {
+      "file": "hype_51.mp3",
+      "mood": "hype",
+      "title": "Can't Stop",
+      "artist": "Red Hot Chili Peppers"
+    },
+    {
+      "file": "hype_52.mp3",
+      "mood": "hype",
+      "title": "Titanium",
+      "artist": "David Guetta & Sia"
+    },
+    {
+      "file": "hype_53.mp3",
+      "mood": "hype",
+      "title": "Wake Me Up",
+      "artist": "Avicii"
+    },
+    {
+      "file": "hype_54.mp3",
+      "mood": "hype",
+      "title": "Levels",
+      "artist": "Avicii"
+    },
+    {
+      "file": "hype_55.mp3",
+      "mood": "hype",
+      "title": "Animals",
+      "artist": "Martin Garrix"
+    },
+    {
+      "file": "hype_56.mp3",
+      "mood": "hype",
+      "title": "Turn Down for What",
+      "artist": "DJ Snake & Lil Jon"
+    },
+    {
+      "file": "hype_57.mp3",
+      "mood": "hype",
+      "title": "Lean On",
+      "artist": "Major Lazer & DJ Snake"
+    },
+    {
+      "file": "hype_58.mp3",
+      "mood": "hype",
+      "title": "Sprinter",
+      "artist": "Dave & Central Cee"
+    },
+    {
+      "file": "hype_59.mp3",
+      "mood": "hype",
+      "title": "Calm Down",
+      "artist": "Rema & Selena Gomez"
+    },
+    {
+      "file": "hype_60.mp3",
+      "mood": "hype",
+      "title": "Gasolina",
+      "artist": "Daddy Yankee"
+    },
+    {
+      "file": "aggressive_11.mp3",
+      "mood": "aggressive",
+      "title": "RAVE",
+      "artist": "Dxrk ダーク"
+    },
+    {
+      "file": "aggressive_12.mp3",
+      "mood": "aggressive",
+      "title": "Live Another Day",
+      "artist": "KORDHELL"
+    },
+    {
+      "file": "aggressive_13.mp3",
+      "mood": "aggressive",
+      "title": "Scopin",
+      "artist": "KORDHELL"
+    },
+    {
+      "file": "aggressive_14.mp3",
+      "mood": "aggressive",
+      "title": "Cowbell Warrior!",
+      "artist": "SXID"
+    },
+    {
+      "file": "aggressive_15.mp3",
+      "mood": "aggressive",
+      "title": "Lovely Bastards",
+      "artist": "ZWE1HVNDXR"
+    },
+    {
+      "file": "aggressive_16.mp3",
+      "mood": "aggressive",
+      "title": "PASSO BEM SOLTO",
+      "artist": "ATLXS"
+    },
+    {
+      "file": "aggressive_17.mp3",
+      "mood": "aggressive",
+      "title": "SLAY!",
+      "artist": "Eternxlkz"
+    },
+    {
+      "file": "aggressive_18.mp3",
+      "mood": "aggressive",
+      "title": "GLORY",
+      "artist": "Ogryzek"
+    },
+    {
+      "file": "aggressive_19.mp3",
+      "mood": "aggressive",
+      "title": "AVANGARD",
+      "artist": "LONOWN"
+    },
+    {
+      "file": "aggressive_20.mp3",
+      "mood": "aggressive",
+      "title": "Bodies",
+      "artist": "Drowning Pool"
+    },
+    {
+      "file": "aggressive_21.mp3",
+      "mood": "aggressive",
+      "title": "Duality",
+      "artist": "Slipknot"
+    },
+    {
+      "file": "aggressive_22.mp3",
+      "mood": "aggressive",
+      "title": "Psychosocial",
+      "artist": "Slipknot"
+    },
+    {
+      "file": "aggressive_23.mp3",
+      "mood": "aggressive",
+      "title": "Before I Forget",
+      "artist": "Slipknot"
+    },
+    {
+      "file": "aggressive_24.mp3",
+      "mood": "aggressive",
+      "title": "Enter Sandman",
+      "artist": "Metallica"
+    },
+    {
+      "file": "aggressive_25.mp3",
+      "mood": "aggressive",
+      "title": "Master of Puppets",
+      "artist": "Metallica"
+    },
+    {
+      "file": "aggressive_26.mp3",
+      "mood": "aggressive",
+      "title": "Chop Suey!",
+      "artist": "System Of A Down"
+    },
+    {
+      "file": "aggressive_27.mp3",
+      "mood": "aggressive",
+      "title": "Toxicity",
+      "artist": "System Of A Down"
+    },
+    {
+      "file": "aggressive_28.mp3",
+      "mood": "aggressive",
+      "title": "B.Y.O.B.",
+      "artist": "System Of A Down"
+    },
+    {
+      "file": "aggressive_29.mp3",
+      "mood": "aggressive",
+      "title": "Killing In The Name",
+      "artist": "Rage Against The Machine"
+    },
+    {
+      "file": "aggressive_30.mp3",
+      "mood": "aggressive",
+      "title": "Bulls On Parade",
+      "artist": "Rage Against The Machine"
+    },
+    {
+      "file": "aggressive_31.mp3",
+      "mood": "aggressive",
+      "title": "Down With The Sickness",
+      "artist": "Disturbed"
+    },
+    {
+      "file": "aggressive_32.mp3",
+      "mood": "aggressive",
+      "title": "Faint",
+      "artist": "Linkin Park"
+    },
+    {
+      "file": "aggressive_33.mp3",
+      "mood": "aggressive",
+      "title": "Given Up",
+      "artist": "Linkin Park"
+    },
+    {
+      "file": "aggressive_34.mp3",
+      "mood": "aggressive",
+      "title": "Bleed It Out",
+      "artist": "Linkin Park"
+    },
+    {
+      "file": "aggressive_35.mp3",
+      "mood": "aggressive",
+      "title": "Break Stuff",
+      "artist": "Limp Bizkit"
+    },
+    {
+      "file": "aggressive_36.mp3",
+      "mood": "aggressive",
+      "title": "Rollin' (Air Raid Vehicle)",
+      "artist": "Limp Bizkit"
+    },
+    {
+      "file": "aggressive_37.mp3",
+      "mood": "aggressive",
+      "title": "Freak On a Leash",
+      "artist": "Korn"
+    },
+    {
+      "file": "aggressive_38.mp3",
+      "mood": "aggressive",
+      "title": "Last Resort",
+      "artist": "Papa Roach"
+    },
+    {
+      "file": "aggressive_39.mp3",
+      "mood": "aggressive",
+      "title": "Du Hast",
+      "artist": "Rammstein"
+    },
+    {
+      "file": "aggressive_40.mp3",
+      "mood": "aggressive",
+      "title": "Sonne",
+      "artist": "Rammstein"
+    },
+    {
+      "file": "aggressive_41.mp3",
+      "mood": "aggressive",
+      "title": "The Pretender",
+      "artist": "Foo Fighters"
+    },
+    {
+      "file": "aggressive_42.mp3",
+      "mood": "aggressive",
+      "title": "Monster",
+      "artist": "Skillet"
+    },
+    {
+      "file": "aggressive_43.mp3",
+      "mood": "aggressive",
+      "title": "Animal I Have Become",
+      "artist": "Three Days Grace"
+    },
+    {
+      "file": "aggressive_44.mp3",
+      "mood": "aggressive",
+      "title": "Headstrong",
+      "artist": "Trapt"
+    },
+    {
+      "file": "aggressive_45.mp3",
+      "mood": "aggressive",
+      "title": "Sabotage",
+      "artist": "Beastie Boys"
+    },
+    {
+      "file": "aggressive_46.mp3",
+      "mood": "aggressive",
+      "title": "X Gon' Give It To Ya",
+      "artist": "DMX"
+    },
+    {
+      "file": "aggressive_47.mp3",
+      "mood": "aggressive",
+      "title": "Party Up (Up in Here)",
+      "artist": "DMX"
+    },
+    {
+      "file": "aggressive_48.mp3",
+      "mood": "aggressive",
+      "title": "Get Low",
+      "artist": "Lil Jon & The East Side Boyz"
+    },
+    {
+      "file": "aggressive_49.mp3",
+      "mood": "aggressive",
+      "title": "Bangarang",
+      "artist": "Skrillex"
+    },
+    {
+      "file": "aggressive_50.mp3",
+      "mood": "aggressive",
+      "title": "First of the Year (Equinox)",
+      "artist": "Skrillex"
+    },
+    {
+      "file": "aggressive_51.mp3",
+      "mood": "aggressive",
+      "title": "Seven Nation Army",
+      "artist": "The White Stripes"
+    },
+    {
+      "file": "aggressive_52.mp3",
+      "mood": "aggressive",
+      "title": "Smells Like Teen Spirit",
+      "artist": "Nirvana"
+    },
+    {
+      "file": "aggressive_53.mp3",
+      "mood": "aggressive",
+      "title": "Thunderstruck",
+      "artist": "AC/DC"
+    },
+    {
+      "file": "aggressive_54.mp3",
+      "mood": "aggressive",
+      "title": "Back In Black",
+      "artist": "AC/DC"
+    },
+    {
+      "file": "aggressive_55.mp3",
+      "mood": "aggressive",
+      "title": "Highway to Hell",
+      "artist": "AC/DC"
+    },
+    {
+      "file": "aggressive_56.mp3",
+      "mood": "aggressive",
+      "title": "Welcome to the Jungle",
+      "artist": "Guns N' Roses"
+    },
+    {
+      "file": "aggressive_57.mp3",
+      "mood": "aggressive",
+      "title": "Paranoid",
+      "artist": "Black Sabbath"
+    },
+    {
+      "file": "aggressive_58.mp3",
+      "mood": "aggressive",
+      "title": "Ace of Spades",
+      "artist": "Motörhead"
+    },
+    {
+      "file": "aggressive_59.mp3",
+      "mood": "aggressive",
+      "title": "Holy Diver",
+      "artist": "Dio"
+    },
+    {
+      "file": "aggressive_60.mp3",
+      "mood": "aggressive",
+      "title": "Walk",
+      "artist": "Pantera"
+    },
+    {
+      "file": "dark_11.mp3",
+      "mood": "dark",
+      "title": "bad guy",
+      "artist": "Billie Eilish"
+    },
+    {
+      "file": "dark_12.mp3",
+      "mood": "dark",
+      "title": "bury a friend",
+      "artist": "Billie Eilish"
+    },
+    {
+      "file": "dark_13.mp3",
+      "mood": "dark",
+      "title": "Everybody Wants To Rule The World",
+      "artist": "Tears For Fears"
+    },
+    {
+      "file": "dark_14.mp3",
+      "mood": "dark",
+      "title": "Paint It, Black",
+      "artist": "The Rolling Stones"
+    },
+    {
+      "file": "dark_15.mp3",
+      "mood": "dark",
+      "title": "Bring Me To Life",
+      "artist": "Evanescence"
+    },
+    {
+      "file": "dark_16.mp3",
+      "mood": "dark",
+      "title": "Seven Devils",
+      "artist": "Florence + The Machine"
+    },
+    {
+      "file": "dark_17.mp3",
+      "mood": "dark",
+      "title": "Heathens",
+      "artist": "twenty one pilots"
+    },
+    {
+      "file": "dark_18.mp3",
+      "mood": "dark",
+      "title": "Teardrop",
+      "artist": "Massive Attack"
+    },
+    {
+      "file": "dark_19.mp3",
+      "mood": "dark",
+      "title": "Angel",
+      "artist": "Massive Attack"
+    },
+    {
+      "file": "dark_20.mp3",
+      "mood": "dark",
+      "title": "Closer",
+      "artist": "Nine Inch Nails"
+    },
+    {
+      "file": "dark_21.mp3",
+      "mood": "dark",
+      "title": "Hurt",
+      "artist": "Nine Inch Nails"
+    },
+    {
+      "file": "dark_22.mp3",
+      "mood": "dark",
+      "title": "Sweet Dreams (Are Made of This)",
+      "artist": "Eurythmics"
+    },
+    {
+      "file": "dark_23.mp3",
+      "mood": "dark",
+      "title": "Smooth Criminal",
+      "artist": "Michael Jackson"
+    },
+    {
+      "file": "dark_24.mp3",
+      "mood": "dark",
+      "title": "Billie Jean",
+      "artist": "Michael Jackson"
+    },
+    {
+      "file": "dark_25.mp3",
+      "mood": "dark",
+      "title": "Feel Good Inc.",
+      "artist": "Gorillaz"
+    },
+    {
+      "file": "dark_26.mp3",
+      "mood": "dark",
+      "title": "Clint Eastwood",
+      "artist": "Gorillaz"
+    },
+    {
+      "file": "dark_27.mp3",
+      "mood": "dark",
+      "title": "Running Up That Hill",
+      "artist": "Kate Bush"
+    },
+    {
+      "file": "dark_28.mp3",
+      "mood": "dark",
+      "title": "Enjoy the Silence",
+      "artist": "Depeche Mode"
+    },
+    {
+      "file": "dark_29.mp3",
+      "mood": "dark",
+      "title": "Personal Jesus",
+      "artist": "Depeche Mode"
+    },
+    {
+      "file": "dark_30.mp3",
+      "mood": "dark",
+      "title": "Take Me To Church",
+      "artist": "Hozier"
+    },
+    {
+      "file": "dark_31.mp3",
+      "mood": "dark",
+      "title": "Arsonist's Lullabye",
+      "artist": "Hozier"
+    },
+    {
+      "file": "dark_32.mp3",
+      "mood": "dark",
+      "title": "In the Air Tonight",
+      "artist": "Phil Collins"
+    },
+    {
+      "file": "dark_33.mp3",
+      "mood": "dark",
+      "title": "Black Hole Sun",
+      "artist": "Soundgarden"
+    },
+    {
+      "file": "dark_34.mp3",
+      "mood": "dark",
+      "title": "Creep",
+      "artist": "Radiohead"
+    },
+    {
+      "file": "dark_35.mp3",
+      "mood": "dark",
+      "title": "Karma Police",
+      "artist": "Radiohead"
+    },
+    {
+      "file": "dark_36.mp3",
+      "mood": "dark",
+      "title": "Earned It",
+      "artist": "The Weeknd"
+    },
+    {
+      "file": "dark_37.mp3",
+      "mood": "dark",
+      "title": "Often",
+      "artist": "The Weeknd"
+    },
+    {
+      "file": "dark_38.mp3",
+      "mood": "dark",
+      "title": "Call Out My Name",
+      "artist": "The Weeknd"
+    },
+    {
+      "file": "dark_39.mp3",
+      "mood": "dark",
+      "title": "Unholy",
+      "artist": "Sam Smith & Kim Petras"
+    },
+    {
+      "file": "dark_40.mp3",
+      "mood": "dark",
+      "title": "Gods & Monsters",
+      "artist": "Lana Del Rey"
+    },
+    {
+      "file": "dark_41.mp3",
+      "mood": "dark",
+      "title": "West Coast",
+      "artist": "Lana Del Rey"
+    },
+    {
+      "file": "dark_42.mp3",
+      "mood": "dark",
+      "title": "Natural",
+      "artist": "Imagine Dragons"
+    },
+    {
+      "file": "dark_43.mp3",
+      "mood": "dark",
+      "title": "Demons",
+      "artist": "Imagine Dragons"
+    },
+    {
+      "file": "dark_44.mp3",
+      "mood": "dark",
+      "title": "Enemy",
+      "artist": "Imagine Dragons & JID"
+    },
+    {
+      "file": "dark_45.mp3",
+      "mood": "dark",
+      "title": "Bones",
+      "artist": "Imagine Dragons"
+    },
+    {
+      "file": "dark_46.mp3",
+      "mood": "dark",
+      "title": "Control",
+      "artist": "Halsey"
+    },
+    {
+      "file": "dark_47.mp3",
+      "mood": "dark",
+      "title": "Gasoline",
+      "artist": "Halsey"
+    },
+    {
+      "file": "dark_48.mp3",
+      "mood": "dark",
+      "title": "My Demons",
+      "artist": "STARSET"
+    },
+    {
+      "file": "dark_49.mp3",
+      "mood": "dark",
+      "title": "Romantic Homicide",
+      "artist": "d4vd"
+    },
+    {
+      "file": "dark_50.mp3",
+      "mood": "dark",
+      "title": "Not Allowed",
+      "artist": "TV Girl"
+    },
+    {
+      "file": "dark_51.mp3",
+      "mood": "dark",
+      "title": "Daddy Issues",
+      "artist": "The Neighbourhood"
+    },
+    {
+      "file": "dark_52.mp3",
+      "mood": "dark",
+      "title": "R U Mine?",
+      "artist": "Arctic Monkeys"
+    },
+    {
+      "file": "dark_53.mp3",
+      "mood": "dark",
+      "title": "Why'd You Only Call Me When You're High?",
+      "artist": "Arctic Monkeys"
+    },
+    {
+      "file": "dark_54.mp3",
+      "mood": "dark",
+      "title": "Nightcall",
+      "artist": "Kavinsky"
+    },
+    {
+      "file": "dark_55.mp3",
+      "mood": "dark",
+      "title": "Tech Noir",
+      "artist": "Gunship"
+    },
+    {
+      "file": "dark_56.mp3",
+      "mood": "dark",
+      "title": "Turbo Killer",
+      "artist": "Carpenter Brut"
+    },
+    {
+      "file": "dark_57.mp3",
+      "mood": "dark",
+      "title": "Bloody Mary",
+      "artist": "Lady Gaga"
+    },
+    {
+      "file": "dark_58.mp3",
+      "mood": "dark",
+      "title": "Play With Fire",
+      "artist": "Sam Tinnesz"
+    },
+    {
+      "file": "dark_59.mp3",
+      "mood": "dark",
+      "title": "Animals",
+      "artist": "Maroon 5"
+    },
+    {
+      "file": "dark_60.mp3",
+      "mood": "dark",
+      "title": "Sail",
+      "artist": "AWOLNATION"
+    },
+    {
+      "file": "epic_11.mp3",
+      "mood": "epic",
+      "title": "No Time for Caution",
+      "artist": "Hans Zimmer"
+    },
+    {
+      "file": "epic_12.mp3",
+      "mood": "epic",
+      "title": "Mountains",
+      "artist": "Hans Zimmer"
+    },
+    {
+      "file": "epic_13.mp3",
+      "mood": "epic",
+      "title": "Now We Are Free",
+      "artist": "Hans Zimmer & Lisa Gerrard"
+    },
+    {
+      "file": "epic_14.mp3",
+      "mood": "epic",
+      "title": "Dream Is Collapsing",
+      "artist": "Hans Zimmer"
+    },
+    {
+      "file": "epic_15.mp3",
+      "mood": "epic",
+      "title": "He's a Pirate",
+      "artist": "Klaus Badelt"
+    },
+    {
+      "file": "epic_16.mp3",
+      "mood": "epic",
+      "title": "Duel of the Fates",
+      "artist": "John Williams"
+    },
+    {
+      "file": "epic_17.mp3",
+      "mood": "epic",
+      "title": "The Imperial March",
+      "artist": "John Williams"
+    },
+    {
+      "file": "epic_18.mp3",
+      "mood": "epic",
+      "title": "Jurassic Park Theme",
+      "artist": "John Williams"
+    },
+    {
+      "file": "epic_19.mp3",
+      "mood": "epic",
+      "title": "Lux Aeterna",
+      "artist": "Clint Mansell"
+    },
+    {
+      "file": "epic_20.mp3",
+      "mood": "epic",
+      "title": "Heart of Courage",
+      "artist": "Two Steps From Hell"
+    },
+    {
+      "file": "epic_21.mp3",
+      "mood": "epic",
+      "title": "Victory",
+      "artist": "Two Steps From Hell"
+    },
+    {
+      "file": "epic_22.mp3",
+      "mood": "epic",
+      "title": "Protectors of the Earth",
+      "artist": "Two Steps From Hell"
+    },
+    {
+      "file": "epic_23.mp3",
+      "mood": "epic",
+      "title": "Strength of a Thousand Men",
+      "artist": "Two Steps From Hell"
+    },
+    {
+      "file": "epic_24.mp3",
+      "mood": "epic",
+      "title": "Hall of Fame",
+      "artist": "The Script & will.i.am"
+    },
+    {
+      "file": "epic_25.mp3",
+      "mood": "epic",
+      "title": "Legends Never Die",
+      "artist": "League of Legends"
+    },
+    {
+      "file": "epic_26.mp3",
+      "mood": "epic",
+      "title": "RISE",
+      "artist": "League of Legends"
+    },
+    {
+      "file": "epic_27.mp3",
+      "mood": "epic",
+      "title": "Warriors",
+      "artist": "Imagine Dragons"
+    },
+    {
+      "file": "epic_28.mp3",
+      "mood": "epic",
+      "title": "Radioactive",
+      "artist": "Imagine Dragons"
+    },
+    {
+      "file": "epic_29.mp3",
+      "mood": "epic",
+      "title": "Whatever It Takes",
+      "artist": "Imagine Dragons"
+    },
+    {
+      "file": "epic_30.mp3",
+      "mood": "epic",
+      "title": "Centuries",
+      "artist": "Fall Out Boy"
+    },
+    {
+      "file": "epic_31.mp3",
+      "mood": "epic",
+      "title": "The Phoenix",
+      "artist": "Fall Out Boy"
+    },
+    {
+      "file": "epic_32.mp3",
+      "mood": "epic",
+      "title": "Immortals",
+      "artist": "Fall Out Boy"
+    },
+    {
+      "file": "epic_33.mp3",
+      "mood": "epic",
+      "title": "Unstoppable",
+      "artist": "Sia"
+    },
+    {
+      "file": "epic_34.mp3",
+      "mood": "epic",
+      "title": "Paradise",
+      "artist": "Coldplay"
+    },
+    {
+      "file": "epic_35.mp3",
+      "mood": "epic",
+      "title": "A Sky Full of Stars",
+      "artist": "Coldplay"
+    },
+    {
+      "file": "epic_36.mp3",
+      "mood": "epic",
+      "title": "Hymn for the Weekend",
+      "artist": "Coldplay"
+    },
+    {
+      "file": "epic_37.mp3",
+      "mood": "epic",
+      "title": "Run Boy Run",
+      "artist": "Woodkid"
+    },
+    {
+      "file": "epic_38.mp3",
+      "mood": "epic",
+      "title": "Iron",
+      "artist": "Woodkid"
+    },
+    {
+      "file": "epic_39.mp3",
+      "mood": "epic",
+      "title": "Dream On",
+      "artist": "Aerosmith"
+    },
+    {
+      "file": "epic_40.mp3",
+      "mood": "epic",
+      "title": "Eye of the Tiger",
+      "artist": "Survivor"
+    },
+    {
+      "file": "epic_41.mp3",
+      "mood": "epic",
+      "title": "We Will Rock You",
+      "artist": "Queen"
+    },
+    {
+      "file": "epic_42.mp3",
+      "mood": "epic",
+      "title": "Bohemian Rhapsody",
+      "artist": "Queen"
+    },
+    {
+      "file": "epic_43.mp3",
+      "mood": "epic",
+      "title": "Don't Stop Me Now",
+      "artist": "Queen"
+    },
+    {
+      "file": "epic_44.mp3",
+      "mood": "epic",
+      "title": "The Final Countdown",
+      "artist": "Europe"
+    },
+    {
+      "file": "epic_45.mp3",
+      "mood": "epic",
+      "title": "Kashmir",
+      "artist": "Led Zeppelin"
+    },
+    {
+      "file": "epic_46.mp3",
+      "mood": "epic",
+      "title": "Immigrant Song",
+      "artist": "Led Zeppelin"
+    },
+    {
+      "file": "epic_47.mp3",
+      "mood": "epic",
+      "title": "Uprising",
+      "artist": "Muse"
+    },
+    {
+      "file": "epic_48.mp3",
+      "mood": "epic",
+      "title": "Knights of Cydonia",
+      "artist": "Muse"
+    },
+    {
+      "file": "epic_49.mp3",
+      "mood": "epic",
+      "title": "Supermassive Black Hole",
+      "artist": "Muse"
+    },
+    {
+      "file": "epic_50.mp3",
+      "mood": "epic",
+      "title": "A Real Hero",
+      "artist": "College & Electric Youth"
+    },
+    {
+      "file": "epic_51.mp3",
+      "mood": "epic",
+      "title": "Sweet Child O' Mine",
+      "artist": "Guns N' Roses"
+    },
+    {
+      "file": "epic_52.mp3",
+      "mood": "epic",
+      "title": "The Spectre",
+      "artist": "Alan Walker"
+    },
+    {
+      "file": "epic_53.mp3",
+      "mood": "epic",
+      "title": "Alone",
+      "artist": "Alan Walker"
+    },
+    {
+      "file": "epic_54.mp3",
+      "mood": "epic",
+      "title": "Light of the Seven",
+      "artist": "Ramin Djawadi"
+    },
+    {
+      "file": "epic_55.mp3",
+      "mood": "epic",
+      "title": "Game of Thrones Main Title",
+      "artist": "Ramin Djawadi"
+    },
+    {
+      "file": "epic_56.mp3",
+      "mood": "epic",
+      "title": "The Avengers",
+      "artist": "Alan Silvestri"
+    },
+    {
+      "file": "epic_57.mp3",
+      "mood": "epic",
+      "title": "Mission: Impossible Theme",
+      "artist": "Lalo Schifrin"
+    },
+    {
+      "file": "epic_58.mp3",
+      "mood": "epic",
+      "title": "Davy Jones",
+      "artist": "Hans Zimmer"
+    },
+    {
+      "file": "epic_59.mp3",
+      "mood": "epic",
+      "title": "Day One",
+      "artist": "Hans Zimmer"
+    },
+    {
+      "file": "epic_60.mp3",
+      "mood": "epic",
+      "title": "Mr. Blue Sky",
+      "artist": "Electric Light Orchestra"
+    },
+    {
+      "file": "emotional_11.mp3",
+      "mood": "emotional",
+      "title": "Someone You Loved",
+      "artist": "Lewis Capaldi"
+    },
+    {
+      "file": "emotional_12.mp3",
+      "mood": "emotional",
+      "title": "Before You Go",
+      "artist": "Lewis Capaldi"
+    },
+    {
+      "file": "emotional_13.mp3",
+      "mood": "emotional",
+      "title": "Let Her Go",
+      "artist": "Passenger"
+    },
+    {
+      "file": "emotional_14.mp3",
+      "mood": "emotional",
+      "title": "Fix You",
+      "artist": "Coldplay"
+    },
+    {
+      "file": "emotional_15.mp3",
+      "mood": "emotional",
+      "title": "The Scientist",
+      "artist": "Coldplay"
+    },
+    {
+      "file": "emotional_16.mp3",
+      "mood": "emotional",
+      "title": "Say Something",
+      "artist": "A Great Big World & Christina Aguilera"
+    },
+    {
+      "file": "emotional_17.mp3",
+      "mood": "emotional",
+      "title": "Skinny Love",
+      "artist": "Bon Iver"
+    },
+    {
+      "file": "emotional_18.mp3",
+      "mood": "emotional",
+      "title": "Holocene",
+      "artist": "Bon Iver"
+    },
+    {
+      "file": "emotional_19.mp3",
+      "mood": "emotional",
+      "title": "lovely",
+      "artist": "Billie Eilish & Khalid"
+    },
+    {
+      "file": "emotional_20.mp3",
+      "mood": "emotional",
+      "title": "when the party's over",
+      "artist": "Billie Eilish"
+    },
+    {
+      "file": "emotional_21.mp3",
+      "mood": "emotional",
+      "title": "What Was I Made For?",
+      "artist": "Billie Eilish"
+    },
+    {
+      "file": "emotional_22.mp3",
+      "mood": "emotional",
+      "title": "Happier Than Ever",
+      "artist": "Billie Eilish"
+    },
+    {
+      "file": "emotional_23.mp3",
+      "mood": "emotional",
+      "title": "drivers license",
+      "artist": "Olivia Rodrigo"
+    },
+    {
+      "file": "emotional_24.mp3",
+      "mood": "emotional",
+      "title": "traitor",
+      "artist": "Olivia Rodrigo"
+    },
+    {
+      "file": "emotional_25.mp3",
+      "mood": "emotional",
+      "title": "Someone Like You",
+      "artist": "Adele"
+    },
+    {
+      "file": "emotional_26.mp3",
+      "mood": "emotional",
+      "title": "Hello",
+      "artist": "Adele"
+    },
+    {
+      "file": "emotional_27.mp3",
+      "mood": "emotional",
+      "title": "Easy On Me",
+      "artist": "Adele"
+    },
+    {
+      "file": "emotional_28.mp3",
+      "mood": "emotional",
+      "title": "Young and Beautiful",
+      "artist": "Lana Del Rey"
+    },
+    {
+      "file": "emotional_29.mp3",
+      "mood": "emotional",
+      "title": "Summertime Sadness",
+      "artist": "Lana Del Rey"
+    },
+    {
+      "file": "emotional_30.mp3",
+      "mood": "emotional",
+      "title": "Numb",
+      "artist": "Linkin Park"
+    },
+    {
+      "file": "emotional_31.mp3",
+      "mood": "emotional",
+      "title": "In The End",
+      "artist": "Linkin Park"
+    },
+    {
+      "file": "emotional_32.mp3",
+      "mood": "emotional",
+      "title": "Heather",
+      "artist": "Conan Gray"
+    },
+    {
+      "file": "emotional_33.mp3",
+      "mood": "emotional",
+      "title": "Atlantis",
+      "artist": "Seafret"
+    },
+    {
+      "file": "emotional_34.mp3",
+      "mood": "emotional",
+      "title": "Arcade",
+      "artist": "Duncan Laurence"
+    },
+    {
+      "file": "emotional_35.mp3",
+      "mood": "emotional",
+      "title": "See You Again",
+      "artist": "Wiz Khalifa & Charlie Puth"
+    },
+    {
+      "file": "emotional_36.mp3",
+      "mood": "emotional",
+      "title": "Stay With Me",
+      "artist": "Sam Smith"
+    },
+    {
+      "file": "emotional_37.mp3",
+      "mood": "emotional",
+      "title": "Too Good At Goodbyes",
+      "artist": "Sam Smith"
+    },
+    {
+      "file": "emotional_38.mp3",
+      "mood": "emotional",
+      "title": "Jealous",
+      "artist": "Labrinth"
+    },
+    {
+      "file": "emotional_39.mp3",
+      "mood": "emotional",
+      "title": "Somebody That I Used To Know",
+      "artist": "Gotye"
+    },
+    {
+      "file": "emotional_40.mp3",
+      "mood": "emotional",
+      "title": "Hallelujah",
+      "artist": "Leonard Cohen"
+    },
+    {
+      "file": "emotional_41.mp3",
+      "mood": "emotional",
+      "title": "Tears in Heaven",
+      "artist": "Eric Clapton"
+    },
+    {
+      "file": "emotional_42.mp3",
+      "mood": "emotional",
+      "title": "Nuvole Bianche",
+      "artist": "Ludovico Einaudi"
+    },
+    {
+      "file": "emotional_43.mp3",
+      "mood": "emotional",
+      "title": "River Flows in You",
+      "artist": "Yiruma"
+    },
+    {
+      "file": "emotional_44.mp3",
+      "mood": "emotional",
+      "title": "Comptine d'un autre été",
+      "artist": "Yann Tiersen"
+    },
+    {
+      "file": "emotional_45.mp3",
+      "mood": "emotional",
+      "title": "Agar Tum Saath Ho",
+      "artist": "Alka Yagnik & Arijit Singh"
+    },
+    {
+      "file": "emotional_46.mp3",
+      "mood": "emotional",
+      "title": "Channa Mereya",
+      "artist": "Arijit Singh"
+    },
+    {
+      "file": "emotional_47.mp3",
+      "mood": "emotional",
+      "title": "Tujhe Kitna Chahne Lage",
+      "artist": "Arijit Singh"
+    },
+    {
+      "file": "emotional_48.mp3",
+      "mood": "emotional",
+      "title": "Lose You To Love Me",
+      "artist": "Selena Gomez"
+    },
+    {
+      "file": "emotional_49.mp3",
+      "mood": "emotional",
+      "title": "Happier",
+      "artist": "Ed Sheeran"
+    },
+    {
+      "file": "emotional_50.mp3",
+      "mood": "emotional",
+      "title": "Supermarket Flowers",
+      "artist": "Ed Sheeran"
+    },
+    {
+      "file": "emotional_51.mp3",
+      "mood": "emotional",
+      "title": "Train Wreck",
+      "artist": "James Arthur"
+    },
+    {
+      "file": "emotional_52.mp3",
+      "mood": "emotional",
+      "title": "Impossible",
+      "artist": "James Arthur"
+    },
+    {
+      "file": "emotional_53.mp3",
+      "mood": "emotional",
+      "title": "All I Want",
+      "artist": "Kodaline"
+    },
+    {
+      "file": "emotional_54.mp3",
+      "mood": "emotional",
+      "title": "Chasing Cars",
+      "artist": "Snow Patrol"
+    },
+    {
+      "file": "emotional_55.mp3",
+      "mood": "emotional",
+      "title": "Wait",
+      "artist": "M83"
+    },
+    {
+      "file": "emotional_56.mp3",
+      "mood": "emotional",
+      "title": "Ghost",
+      "artist": "Justin Bieber"
+    },
+    {
+      "file": "emotional_57.mp3",
+      "mood": "emotional",
+      "title": "Let Me Down Slowly",
+      "artist": "Alec Benjamin"
+    },
+    {
+      "file": "emotional_58.mp3",
+      "mood": "emotional",
+      "title": "If The World Was Ending",
+      "artist": "JP Saxe & Julia Michaels"
+    },
+    {
+      "file": "emotional_59.mp3",
+      "mood": "emotional",
+      "title": "Sign of the Times",
+      "artist": "Harry Styles"
+    },
+    {
+      "file": "emotional_60.mp3",
+      "mood": "emotional",
+      "title": "exile",
+      "artist": "Taylor Swift & Bon Iver"
+    }
   ]
 }

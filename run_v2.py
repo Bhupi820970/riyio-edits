@@ -561,7 +561,7 @@ def build_draft(src, info, dur, w, h, query, demo, cand, used_urls=None):
     catalog = SM.only_available(SM.load_catalog(), bank_assets())   # only songs really in the songs-bank
     cat_mood = {x.get("file"): x.get("mood") for x in catalog}
     tags = SM.load_tags()
-    pool = SM.rank_songs(smood, catalog, tags)[:MAX_SONG_TRIES]
+    pool = SM.rank_songs(smood, catalog, tags, recent=SM.load_used())[:MAX_SONG_TRIES]   # least-used first
     print(f"SONG POOL scene_mood={smood}:", pool, flush=True)
     song = song_name = tl = None
     snap = (ds, list(words), pidx, punch_s, punch_e)
@@ -1038,6 +1038,8 @@ def main():
     preflight()
     tried, used_urls = set(), set()
     ctx = build_with_candidates(tried, used_urls, demo)
+    if (ctx.get("plan") or {}).get("song"):
+        SM.mark_used(ctx["plan"]["song"])          # no-repeat song rotation (config/used_songs.json)
     draft = ctx["draft"]
 
     verdict = None

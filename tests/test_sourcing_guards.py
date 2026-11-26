@@ -58,6 +58,50 @@ def test_sync_script_imports_resolve():
     assert "max_minutes" in inspect.signature(S.rapid_download).parameters
 
 
+def test_catalog_60_per_mood_no_duplicates():
+    import collections
+    import re
+    cnt = collections.Counter(s["mood"] for s in CAT)
+    assert all(cnt[m] >= 60 for m in ("hype", "romance", "aggressive", "emotional", "epic", "dark")), cnt
+    files = [s["file"] for s in CAT]
+    assert len(files) == len(set(files))
+    norm = lambda s: (re.sub(r"[^a-z0-9]", "", s["title"].lower()), re.sub(r"[^a-z0-9]", "", s["artist"].lower())[:8])
+    keys = [norm(s) for s in CAT]
+    assert len(keys) == len(set(keys)), [k for k in keys if keys.count(k) > 1]
+
+
+def test_songs_do_not_repeat_until_mood_used_up():
+    have = [s for s in CAT if s["mood"] == "hype"]
+    used = []
+    for i in range(len(have)):
+        pick = SM.rank_songs("hype", have, {}, random.Random(i), recent=used)[0]
+        assert pick not in used, (i, pick)
+        used.append(pick)
+    assert len(set(used)) == len(have)
+    nxt = SM.rank_songs("hype", have, {}, random.Random(99), recent=used)[0]
+    assert nxt == used[0]                       # then the least-recently-used one comes back first
+
+
+def test_mark_used_roundtrip(tmp=Path("/tmp/riyio_used_songs_test.json")):
+    tmp.unlink(missing_ok=True)
+    SM.mark_used("hype_1.mp3", tmp)
+    SM.mark_used("hype_2.mp3", tmp)
+    assert SM.mark_used("hype_1.mp3", tmp) == ["hype_2.mp3", "hype_1.mp3"]
+    tmp.unlink()
+
+
+def test_sync_only_takes_originals():
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import sync_songs_bank as SY
+    ok = {"title": "Ed Sheeran - Perfect (Official Music Video)", "channel": "Ed Sheeran", "duration": 263}
+    topic = {"title": "Perfect", "channel": "Ed Sheeran - Topic", "duration": 263}
+    for bad_t in ("Perfect - Ed Sheeran (Tribute)", "Perfect Ed Sheeran slowed + reverb", "Perfect (cover) Ed Sheeran",
+                  "Perfect Ed Sheeran nightcore", "Perfect Ed Sheeran bass boosted"):
+        assert SY._score({"title": bad_t, "channel": "Some Fan", "duration": 200}, "Perfect", "Ed Sheeran") < 4, bad_t
+    assert SY._score(ok, "Perfect", "Ed Sheeran") >= 4 and SY._score(topic, "Perfect", "Ed Sheeran") >= 4
+    assert SY._score({"title": "Perfect lyrics", "channel": "Lyric Vibes", "duration": 200}, "Perfect", "Ed Sheeran") < 4
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

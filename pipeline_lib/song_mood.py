@@ -79,9 +79,12 @@ def allowed(scene: str, song_mood: str) -> bool:
     return song_mood in ALLOWED.get(scene, ALLOWED["dark"])
 
 
-def rank_songs(scene: str, songs: list[dict], tags: dict, rng: random.Random | None = None) -> list[str]:
-    """Files allowed for this scene mood: by mood preference, then tempo fit, shuffled inside ties."""
+def rank_songs(scene: str, songs: list[dict], tags: dict, rng: random.Random | None = None,
+               recent: list[str] | None = None) -> list[str]:
+    """Files allowed for this scene mood: by mood preference, then least-recently-used (never-used first, so no
+    song repeats until its whole mood has been used), then tempo fit, shuffled inside ties."""
     rng = rng or random.Random()
+    last = {f: i for i, f in enumerate(recent or [])}     # higher index = used more recently
     prefs = ALLOWED.get(scene, ALLOWED["dark"])
     cands = []
     for s in songs:
@@ -92,7 +95,7 @@ def rank_songs(scene: str, songs: list[dict], tags: dict, rng: random.Random | N
         fit = tempo_fit(t.get("bpm") or 0, scene)
         if t.get("bpm") and fit > 30:          # far off-tempo (e.g. a 60 BPM ballad on a hype scene): skip
             continue
-        cands.append((prefs.index(m), min(fit, 20.0) // 10, rng.random(), f))
+        cands.append((prefs.index(m), last.get(f, -1), min(fit, 20.0) // 10, rng.random(), f))
     return [f for *_, f in sorted(cands)]
 
 
@@ -108,6 +111,26 @@ def load_catalog(path: Path = CATALOG) -> list[dict]:
         return json.loads(Path(path).read_text()).get("songs") or []
     except Exception:
         return []
+
+
+USED = Path("config/used_songs.json")
+USED_KEEP = 400
+
+
+def load_used(path: Path = USED) -> list[str]:
+    try:
+        d = json.loads(Path(path).read_text())
+        return [x for x in d if isinstance(x, str)] if isinstance(d, list) else []
+    except Exception:
+        return []
+
+
+def mark_used(song: str, path: Path = USED) -> list[str]:
+    """Append the song used by a finished edit (oldest first, deduped, capped) - committed back by the workflow."""
+    used = [x for x in load_used(path) if x != song] + ([song] if song else [])
+    used = used[-USED_KEEP:]
+    Path(path).write_text(json.dumps(used, indent=1) + "\n")
+    return used
 
 
 def load_tags(path: Path = TAGS) -> dict:
