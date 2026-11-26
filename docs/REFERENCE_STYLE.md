@@ -1,5 +1,5 @@
 # RIYIO reference style (BiBi's permanent ideal, Nov 22 2026)
-Source files: /workspace/riyio-ref/ref1.mp4 (720x800, 60fps, 59.6s), ref2.mp4 (720x900, 30fps, 46.5s)
+Source files: ref1.mp4 (720x800, 60fps, 59.6s), ref2.mp4 (720x900, 30fps, 46.5s)
 BiBi rules: length 35s-60s; English captions synced to lips; best quality; Gemini picks best scene; match refs in everything.
 
 ## Structure
@@ -32,7 +32,7 @@ BiBi rules: length 35s-60s; English captions synced to lips; best quality; Gemin
 - Gemini director picks the scene, exact timestamps, punch word, hook title and scene_mood (original per scene, never copied from prompt examples).
 - No crop of the 16:9 source: blurred darkened fill top/bottom; white top hook banner with black bold title for the whole video.
 - Montage: same show/character, 0.3-0.8s cuts on kicks, flash + zoom punch + slight RGB split + whoosh/hit SFX (self-generated only), no captions; end card glow "MADE BY RIYIO" + small RIYIO watermark.
-- Reference videos are not committed (kept on the box at /workspace/riyio-ref/).
+- Reference videos are not committed (kept outside git on the old box; ask BiBi for copies).
 
 ## Updates (Nov 22 2026, BiBi after the Gladiator demo) — these override the lines above
 - Music never stops: the dark bed plays under the whole dialogue at about -11 dB (loudness-normalised, silent intros skipped), then the drop plays at 0 dB to the end.
