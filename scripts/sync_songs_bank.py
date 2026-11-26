@@ -22,7 +22,8 @@ CATALOG = Path("config/songs_catalog.json")
 REPO = os.environ.get("REPO", "Bhupi820970/riyio-edits")
 RELEASE = "songs-bank"
 BAD = ("live", "cover", "remix", "karaoke", "reaction", "8d", "slowed", "sped up",
-       "nightcore", "instrumental version", "1 hour", "10 hours", "loop")
+       "nightcore", "instrumental version", "1 hour", "10 hours", "loop", "tribute", "type beat",
+       "bass boosted", "reverb", "extended", "fan made")
 
 
 def run(cmd, timeout=300):
@@ -49,7 +50,8 @@ def pick_video(title: str, artist: str) -> dict | None:
     good = []
     for v in res:
         t = v["title"].lower()
-        if not (90 <= (v["duration"] or 0) <= 600):
+        d = v.get("duration") or 0
+        if d and not (90 <= d <= 600):          # unknown length (0) is allowed: download caps at 10 min
             continue
         if any(b in t for b in BAD) and not any(b in title.lower() for b in BAD):
             continue
@@ -58,9 +60,11 @@ def pick_video(title: str, artist: str) -> dict | None:
             score += 3
         if artist.lower().split(",")[0].split("&")[0].strip()[:10] in (t + " " + v["channel"].lower()):
             score += 2
-        if "official" in t or "topic" in v["channel"].lower():
+        if "official" in t or "topic" in v["channel"].lower() or "vevo" in v["channel"].lower():
             score += 1
         good.append((score, v))
+    # only the original: title must match AND (artist channel/title or official / Topic / VEVO upload)
+    good = [g for g in good if g[0] >= 4]
     if not good:
         return None
     good.sort(key=lambda x: -x[0])
@@ -94,7 +98,12 @@ def main():
                 fail += 1
                 continue
             print(f"  -> {v['title'][:70]} ({int(v['duration'])}s)")
-            rapid_download(v["url"], "mp3", tmp, max_minutes=10)
+            rapid_download(v["url"], tmp, fmt="mp3", max_minutes=10)
+            if not tmp.exists() or tmp.stat().st_size < 500_000:
+                print("  FAILED: file too small")
+                fail += 1
+                tmp.unlink(missing_ok=True)
+                continue
         except AllKeysExhausted as e:
             print("STOP:", e)
             break

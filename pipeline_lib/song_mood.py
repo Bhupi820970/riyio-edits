@@ -15,7 +15,7 @@ from pathlib import Path
 SCENE_MOODS = ("comedy", "dark", "epic", "emotional", "hype")
 # allowed song moods per scene mood, best first
 ALLOWED = {
-    "comedy": ["hype", "aggressive"],
+    "comedy": ["hype", "aggressive", "epic"],      # epic only as the last resort (never emotional/romance)
     "dark": ["dark", "aggressive", "epic"],
     "epic": ["epic", "aggressive", "dark", "hype"],
     "emotional": ["emotional", "romance", "epic"],
@@ -94,6 +94,13 @@ def rank_songs(scene: str, songs: list[dict], tags: dict, rng: random.Random | N
             continue
         cands.append((prefs.index(m), min(fit, 20.0) // 10, rng.random(), f))
     return [f for *_, f in sorted(cands)]
+
+
+def only_available(songs: list[dict], bank: set[str] | None) -> list[dict]:
+    """Catalog entries whose mp3 is really in the songs-bank release (bank=None: listing failed, keep all)."""
+    if not bank:
+        return list(songs)
+    return [s for s in songs if (s.get("file") or "") in bank]
 
 
 def load_catalog(path: Path = CATALOG) -> list[dict]:

@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from pipeline_lib import song_mood as SM  # noqa: E402
-from pipeline_lib.sourcing import download_bank_song  # noqa: E402
+from pipeline_lib.sourcing import download_bank_song, bank_assets  # noqa: E402
 from pipeline_lib.audio_sync import detect_beats  # noqa: E402
 
 
@@ -25,7 +25,7 @@ def main(budget_s: float = 900.0):
     tags = SM.load_tags()
     t0, done = time.time(), 0
     tmp = Path("clips/tag_song.mp3")
-    for s in SM.load_catalog():
+    for s in SM.only_available(SM.load_catalog(), bank_assets()):   # skip catalog songs not in the bank
         f = s.get("file")
         if not f or (tags.get(f) or {}).get("bpm"):
             continue

@@ -8,7 +8,7 @@ from pathlib import Path
 
 from pipeline_lib.gemini_brain import analyze, qc_inspect, prescreen, pick_shots, available as gemini_ok
 from pipeline_lib.audio_sync import detect_beats, whisper_words, detect_language
-from pipeline_lib.sourcing import search_candidates, download_url, download_bank_song
+from pipeline_lib.sourcing import search_candidates, download_url, download_bank_song, bank_assets, rapid_available
 from pipeline_lib.postprocess import upscale_hdr, buffer_post
 from pipeline_lib import style
 from pipeline_lib import captions as captions_mod
@@ -558,7 +558,7 @@ def build_draft(src, info, dur, w, h, query, demo, cand, used_urls=None):
     mood = plan.get("mood") or "dark_hype"
     # song by mood (idea 3): scene mood (comedy / dark / epic / emotional / hype) + cached BPM tags
     smood = SM.scene_mood(plan)
-    catalog = SM.load_catalog()
+    catalog = SM.only_available(SM.load_catalog(), bank_assets())   # only songs really in the songs-bank
     cat_mood = {x.get("file"): x.get("mood") for x in catalog}
     tags = SM.load_tags()
     pool = SM.rank_songs(smood, catalog, tags)[:MAX_SONG_TRIES]
@@ -598,7 +598,8 @@ def build_draft(src, info, dur, w, h, query, demo, cand, used_urls=None):
         song, song_name = got, f
         break
     if not tl:
-        raise CandidateRejected(f"no {smood} song fits the timeline (dialogue {punch_e:.1f}s)")
+        why = "no songs of an allowed mood in songs-bank" if not pool else f"tried {len(pool)}"
+        raise CandidateRejected(f"no {smood} song fits the timeline (dialogue {punch_e:.1f}s; {why})")
     print("TIMELINE", json.dumps({k: v for k, v in tl.items() if not k.endswith("_cuts")}),
           f"intro {len(tl['intro_cuts'])} cuts, outro {len(tl['outro_cuts'])} cuts, song {song_name}", flush=True)
 
@@ -1007,9 +1008,34 @@ def silent_segments(video):
     return [ln.split("]")[-1].strip() for ln in r.stderr.splitlines() if "silence_start" in ln]
 
 
+def preflight():
+    """Fail early with a clear message instead of 30 minutes of rejected candidates."""
+    if not rapid_available():
+        raise SystemExit("ERROR: no RapidAPI key - set repo secret RAPIDAPI_KEY_1 (Settings > Secrets > Actions)")
+    bank = bank_assets()
+    cat = SM.load_catalog()
+    if bank is None:
+        print("SONGS-BANK listing failed - songs are tried one by one", flush=True)
+        return
+    have = SM.only_available(cat, bank)
+    missing = sorted({x.get("file") for x in cat} - {x.get("file") for x in have})
+    by = {}
+    for x in have:
+        by[x.get("mood")] = by.get(x.get("mood"), 0) + 1
+    print(f"SONGS-BANK {len(have)}/{len(cat)} catalog songs present, by mood {by}", flush=True)
+    if missing:
+        print(f"SONGS-BANK missing {len(missing)} (run sync-songs-bank to fill): {missing}", flush=True)
+    if not have:
+        raise SystemExit("ERROR: songs-bank release has no catalog songs - run the sync-songs-bank workflow")
+    for scene in SM.SCENE_MOODS:
+        if not SM.rank_songs(scene, have, {}):
+            print(f"SONGS-BANK WARNING: no song for {scene} scenes", flush=True)
+
+
 def main():
     demo = os.environ.get("DEMO_ONLY", "false").lower() in ("1", "true", "yes")
     print("DEMO", demo, "GEMINI", gemini_ok(), flush=True)
+    preflight()
     tried, used_urls = set(), set()
     ctx = build_with_candidates(tried, used_urls, demo)
     draft = ctx["draft"]

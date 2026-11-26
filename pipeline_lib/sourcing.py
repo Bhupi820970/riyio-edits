@@ -20,6 +20,14 @@ def _keys() -> list[tuple[int, str]]:
             out.append((i, k))
     return out
 
+class AllKeysExhausted(RapidAPIError):
+    """Every RapidAPI key is dead (401/403/429) - stop instead of burning more calls."""
+
+
+def rapid_available() -> bool:
+    return bool(_keys())
+
+
 _DEAD = set()
 _CUR = 0
 
@@ -53,7 +61,7 @@ def _rapid_get(path: str, params: dict, timeout: int = 60) -> dict:
                 _DEAD.add(slot)
                 continue
             raise RapidAPIError(f"http {e.code} {body}") from e
-    raise RapidAPIError("all keys exhausted")
+    raise AllKeysExhausted("all keys exhausted")
 
 def is_blacklisted(title: str, channel: str) -> bool:
     t = (title + " " + channel).lower()
@@ -73,11 +81,35 @@ def rapid_search(query: str) -> list[dict]:
         ch = v.get("channel")
         if isinstance(ch, dict):
             ch = ch.get("name") or ""
-        out.append({"id": vid, "title": v.get("title") or "", "url": link, "channel": ch or ""})
+        out.append({"id": vid, "title": v.get("title") or "", "url": link, "channel": ch or "",
+                    "duration": parse_duration(v.get("duration") or v.get("lengthSeconds") or v.get("length")
+                                               or v.get("lengthText") or v.get("duration_raw") or 0)})
     return out
 
-def rapid_download(url: str, out: Path, fmt: str = "1080") -> dict:
-    params = {"url": url, "format": fmt, "max_duration": "12"}
+
+def parse_duration(v) -> float:
+    """Seconds from 312 / '312' / '5:12' / '1:02:03' / {'simpleText': '5:12'}; 0 = unknown."""
+    if isinstance(v, dict):
+        v = v.get("simpleText") or v.get("text") or v.get("seconds") or 0
+    if isinstance(v, (int, float)):
+        return float(v) if v > 0 else 0.0
+    t = str(v or "").strip()
+    if not t:
+        return 0.0
+    if re.fullmatch(r"\d+(\.\d+)?", t):
+        return float(t)
+    if re.fullmatch(r"\d+(:\d{1,2}){1,2}", t):
+        sec = 0
+        for part in t.split(":"):
+            sec = sec * 60 + int(part)
+        return float(sec)
+    return 0.0
+
+MAX_SOURCE_MIN = 12   # RapidAPI plan limit (longer videos always fail with http 400)
+
+
+def rapid_download(url: str, out: Path, fmt: str = "1080", max_minutes: int = MAX_SOURCE_MIN) -> dict:
+    params = {"url": url, "format": fmt, "max_duration": str(int(max_minutes))}
     if fmt == "mp3":
         params["audio_quality"] = "192"
     job = _rapid_get("/ajax/download.php", params)
@@ -146,12 +178,40 @@ def _rank(it: dict, query: str) -> int:
     return score
 
 
+_BANK = None
+
+
+def bank_assets(refresh: bool = False) -> set[str] | None:
+    """Names of the mp3s really in the songs-bank release (public API, cached). None if listing failed."""
+    global _BANK
+    if _BANK is not None and not refresh:
+        return _BANK
+    repo = os.environ.get("REPO", "Bhupi820970/riyio-edits")
+    url = f"https://api.github.com/repos/{repo}/releases/tags/songs-bank"
+    headers = {"Accept": "application/vnd.github+json", "User-Agent": UA}
+    tok = (os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or "").strip()
+    if tok:
+        headers["Authorization"] = f"Bearer {tok}"
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=30) as r:
+                data = json.loads(r.read().decode() or "{}")
+            names = {a.get("name") for a in data.get("assets") or [] if (a.get("size") or 0) >= 50_000}
+            _BANK = {n for n in names if n}
+            return _BANK
+        except Exception as e:
+            print("songs-bank listing failed:", type(e).__name__, flush=True)
+            time.sleep(2 * (attempt + 1))
+    return None
+
+
 def download_bank_song(fname: str, out: Path) -> Path | None:
     """One named track from the public songs-bank release."""
     repo = os.environ.get("REPO", "Bhupi820970/riyio-edits")
     out.parent.mkdir(parents=True, exist_ok=True)
     url = f"https://github.com/{repo}/releases/download/songs-bank/{fname}"
-    r = subprocess.run(["curl", "-fsSL", "-L", "-o", str(out), url], capture_output=True, text=True, timeout=180)
+    r = subprocess.run(["curl", "-fsSL", "-L", "--retry", "3", "--retry-delay", "2", "-o", str(out), url],
+                       capture_output=True, text=True, timeout=180)
     if r.returncode == 0 and out.exists() and out.stat().st_size >= 50_000:
         print("SONG from songs-bank", fname, out.stat().st_size, flush=True)
         return out
@@ -169,6 +229,8 @@ def skip_reason(it: dict) -> str:
     for k in SKIP_TITLE:
         if k in t:
             return f"title has '{k}'"
+    if (it.get("duration") or 0) > MAX_SOURCE_MIN * 60:
+        return f"too long ({int(it['duration'] // 60)} min > {MAX_SOURCE_MIN} min download limit)"
     return ""
 
 
@@ -192,15 +254,19 @@ def search_candidates(query: str, exclude: set | None = None) -> list[dict]:
 
 
 def download_url(url: str, out: Path) -> dict | None:
-    """Same RapidAPI downloader, best format first (1080 -> 720 -> fallbacks)."""
-    for fmt in ("1080", "720", "mp4", "best"):
+    """Same RapidAPI downloader, 1080 then 720 ('mp4' / 'best' always answer 422 Unknown format)."""
+    for fmt in ("1080", "720"):
         try:
             info = rapid_download(url, out, fmt=fmt)
             info["url"] = url
             print("DOWNLOADED", fmt, out.stat().st_size, flush=True)
             return info
+        except AllKeysExhausted:
+            raise
         except Exception as e:
             print(f"dl fail {fmt}", e)
+            if "duration" in str(e).lower() and "exceed" in str(e).lower():
+                break          # too long for the plan: 720 fails the same way
     return None
 
 
