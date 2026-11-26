@@ -46,7 +46,7 @@ jobs:
       - name: Save song tags (BPM) for the new songs
         if: always()
         run: |
-          git add config/song_tags.json
+          git add config/song_tags.json config/songs_catalog.json config/songs_refetch.json
           if ! git diff --cached --quiet; then
             git -c user.name=bibi-bot -c user.email=bot@users.noreply.github.com commit -m "chore: songs-bank sync ${{ github.run_number }} song tags"
             for i in 1 2 3 4 5; do

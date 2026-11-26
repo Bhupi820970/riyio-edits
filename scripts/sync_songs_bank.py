@@ -100,6 +100,54 @@ def tag_song(path: Path, mood: str) -> dict | None:
 
 
 PRIORITY = ("romance", "hype", "aggressive", "emotional", "epic", "dark")
+REFETCH = Path("config/songs_refetch.json")        # assets to re-download (overwrite) even if present
+ALTERNATES = Path("config/songs_alternates.json")  # famous originals per mood, used when a song can't be found
+
+
+def _load(p: Path, default):
+    try:
+        return json.loads(p.read_text())
+    except (OSError, ValueError):
+        return default
+
+
+def fetch_one(title: str, artist: str, tmp: Path) -> str | None:
+    """Download the official original to tmp. Returns None on success, else a short reason.
+    AllKeysExhausted propagates (stop the run)."""
+    v = pick_video(title, artist)
+    if not v:
+        return "no suitable official search result"
+    print(f"  -> {v['title'][:70]} | {v.get('channel', '')[:30]} ({int(v.get('duration') or 0)}s)")
+    try:
+        for attempt in range(2):
+            try:
+                rapid_download(v["url"], tmp, fmt="mp3", max_minutes=10)
+                break
+            except AllKeysExhausted:
+                raise
+            except RapidAPIError as e:
+                if attempt:
+                    raise
+                print("  download retry:", str(e)[:120])
+                time.sleep(5)
+    except RapidAPIError as e:
+        return f"download failed: {str(e)[:120]}"
+    if not tmp.exists() or tmp.stat().st_size < 500_000:
+        tmp.unlink(missing_ok=True)
+        return "file too small"
+    return None
+
+
+def next_alternate(mood: str, alts: dict, used_titles: set[str]):
+    """First alternate of this mood whose title is not in the catalog yet (consumed in order)."""
+    for line in alts.get(mood) or []:
+        if "|" not in line:
+            continue
+        t, a = (x.strip() for x in line.split("|", 1))
+        if t and a and t.lower() not in used_titles:
+            used_titles.add(t.lower())
+            return t, a
+    return None
 
 
 def main():
@@ -107,23 +155,30 @@ def main():
         print("ERROR: no YT_RAPIDAPI_KEY_1..4 / RAPIDAPI_KEY_1..4 in env")
         sys.exit(1)
     from pipeline_lib import song_mood as SM
-    catalog = json.loads(CATALOG.read_text())["songs"]
-    catalog.sort(key=lambda s: (PRIORITY.index(s["mood"]) if s["mood"] in PRIORITY else 99,
-                                int(s["file"].rsplit("_", 1)[-1].split(".")[0] or 0)))
+    doc = json.loads(CATALOG.read_text())
+    catalog = doc["songs"]
+    order = sorted(catalog, key=lambda s: (PRIORITY.index(s["mood"]) if s["mood"] in PRIORITY else 99,
+                                          int(s["file"].rsplit("_", 1)[-1].split(".")[0] or 0)))
     if run(["gh", "release", "view", RELEASE, "--repo", REPO], timeout=20).returncode != 0:
         run(["gh", "release", "create", RELEASE, "--repo", REPO,
              "--title", "RIYIO songs-bank", "--notes", "Mood-matched songs for the pipeline"], timeout=30)
     have = existing_assets()
     print(f"songs-bank currently has {len(have)} assets")
+    refetch_doc = _load(REFETCH, {"files": []})
+    refetch = set(refetch_doc.get("files") or [])
+    alts = _load(ALTERNATES, {})
+    used_titles = {s["title"].lower() for s in catalog}
+    max_alt = int(os.environ.get("SYNC_MAX_ALTERNATES", "3") or 3)
     limit = int(os.environ.get("SYNC_LIMIT", "0") or 0)
     budget = float(os.environ.get("SYNC_BUDGET_MIN", "300") or 300) * 60
     t0 = time.time()
     tags = SM.load_tags()
     ok = fail = 0
-    failed = []
-    for s in catalog:
+    failed, swapped = [], []
+    stop = False
+    for s in order:
         name = s["file"]
-        if name in have:
+        if name in have and name not in refetch:
             continue
         if limit and ok >= limit:
             break
@@ -131,37 +186,31 @@ def main():
             print("BUDGET reached - re-run sync-songs-bank to continue (already uploaded songs are skipped)")
             break
         tmp = Path("/tmp") / name
-        print(f"fetching {name} — {s['title']} – {s['artist']}")
+        title, artist = s["title"], s["artist"]
+        print(f"fetching {name} — {title} – {artist}" + (" (re-fetch)" if name in refetch else ""))
+        why = None
         try:
-            v = pick_video(s["title"], s["artist"])
-            if not v:
-                print("  no suitable search result")
-                fail += 1
-                failed.append(name)
-                continue
-            print(f"  -> {v['title'][:70]} | {v.get('channel', '')[:30]} ({int(v.get('duration') or 0)}s)")
-            for attempt in range(2):
-                try:
-                    rapid_download(v["url"], tmp, fmt="mp3", max_minutes=10)
+            why = fetch_one(title, artist, tmp)
+            tries = 0
+            # not findable as an official original: swap in another famous original of the same mood
+            while why and tries < max_alt and name not in refetch:
+                alt = next_alternate(s["mood"], alts, used_titles)
+                if not alt:
                     break
-                except AllKeysExhausted:
-                    raise
-                except RapidAPIError as e:
-                    if attempt:
-                        raise
-                    print("  download retry:", str(e)[:120])
-                    time.sleep(5)
-            if not tmp.exists() or tmp.stat().st_size < 500_000:
-                print("  FAILED: file too small")
-                fail += 1
-                failed.append(name)
-                tmp.unlink(missing_ok=True)
-                continue
+                tries += 1
+                print(f"  {why} -> trying alternate {alt[0]} – {alt[1]}")
+                why = fetch_one(alt[0], alt[1], tmp)
+                if not why:
+                    swapped.append({"file": name, "old": f"{title} – {artist}", "new": f"{alt[0]} – {alt[1]}"})
+                    s["replaced"] = f"{title} – {artist} (not found as an official upload)"
+                    s["title"], s["artist"] = alt
         except AllKeysExhausted as e:
             print("STOP:", e)
+            stop = True
+        if stop:
             break
-        except RapidAPIError as e:
-            print("  FAILED:", str(e)[:200])
+        if why:
+            print("  FAILED:", why)
             fail += 1
             failed.append(name)
             continue
@@ -174,6 +223,9 @@ def main():
         if up.returncode == 0:
             ok += 1
             print("  uploaded", name)
+            refetch.discard(name)
+            if swapped and swapped[-1]["file"] == name:   # keep catalog == asset even if the job is cut off
+                CATALOG.write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n")
             tg = tag_song(tmp, s["mood"])
             if tg:
                 tags[name] = tg
@@ -182,6 +234,12 @@ def main():
             fail += 1
             failed.append(name)
         tmp.unlink(missing_ok=True)
+    if swapped:
+        CATALOG.write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n")
+        print("SWAPPED (catalog updated)", json.dumps(swapped, ensure_ascii=False))
+    if REFETCH.exists() or refetch:
+        refetch_doc["files"] = sorted(refetch)
+        REFETCH.write_text(json.dumps(refetch_doc, indent=1) + "\n")
     have = existing_assets()
     by = {}
     for s in catalog:

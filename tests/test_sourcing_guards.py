@@ -102,6 +102,33 @@ def test_sync_only_takes_originals():
     assert SY._score({"title": "Perfect lyrics", "channel": "Lyric Vibes", "duration": 200}, "Perfect", "Ed Sheeran") < 4
 
 
+def test_danza_kuduro_original_and_alternates():
+    import json
+    from pathlib import Path
+    root = Path(__file__).resolve().parent.parent
+    sys.path.insert(0, str(root / "scripts"))
+    import sync_songs_bank as SY
+    cat = json.loads((root / "config" / "songs_catalog.json").read_text())["songs"]
+    r10 = next(s for s in cat if s["file"] == "romance_10.mp3")
+    assert r10["title"] == "Danza Kuduro" and "slowed" not in r10["title"].lower() and "Lucenzo" in r10["artist"]
+    vevo = {"title": "Don Omar - Danza Kuduro ft. Lucenzo", "channel": "DonOmarVEVO", "duration": 199}
+    assert SY._score(vevo, r10["title"], r10["artist"]) >= 4
+    assert SY._score({"title": "Danza Kuduro (Slowed + Reverb)", "channel": "x", "duration": 220},
+                     r10["title"], r10["artist"]) < 4
+    assert "romance_10.mp3" in json.loads((root / "config" / "songs_refetch.json").read_text())["files"]
+    alts = json.loads((root / "config" / "songs_alternates.json").read_text())
+    titles = {s["title"].lower() for s in cat}
+    for mood in ("dark", "epic"):
+        assert len(alts[mood]) >= 25
+        for line in alts[mood]:
+            t, a = line.split("|", 1)
+            assert t.lower() not in titles and a.strip()
+            assert not any(b in line.lower() for b in ("slowed", "sped up", "remix", "cover", "nightcore"))
+    used = set(titles)
+    first = SY.next_alternate("dark", alts, used)
+    assert first and first[0].lower() in used and SY.next_alternate("dark", alts, used) != first
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

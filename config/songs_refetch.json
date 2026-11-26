@@ -1,0 +1,6 @@
+{
+ "note": "Assets re-downloaded (overwritten) by the next sync even though they exist; removed from this list after success.",
+ "files": [
+  "romance_10.mp3"
+ ]
+}
