@@ -67,10 +67,24 @@ def screen(p: Path, dur: float) -> str | None:
     return None if ps.get("clean") else f"pre-screen: {ps.get('reason') or ps.get('flags')}"
 
 
+def used_source_ids() -> set[str]:
+    """YouTube ids already in a video: clip ledger (branch clip-state) + links/used.txt."""
+    from pipeline_lib import clip_reserve, link_queue
+    ids = {k[3:] for k in clip_reserve.ledger_used() if k.startswith("yt:")}
+    try:   # only links that went into a video (not rejected ones)
+        for ln in link_queue.USED.read_text().splitlines():
+            parts = ln.split("\t")
+            if len(parts) >= 3 and not ln.startswith("#") and parts[1] in ("used", "channel-used"):
+                ids.add(link_queue._vid(parts[2]))
+    except OSError:
+        pass
+    return ids - {""}
+
+
 def candidates(doc: dict) -> list[dict]:
     from pipeline_lib import channel_source, channel_blocklist
     from pipeline_lib.sourcing import search_candidates
-    skip = P.known_ids(doc)
+    skip = P.known_ids(doc) | used_source_ids()
     out = []
     try:
         for v in channel_source.candidates(skip):
@@ -103,6 +117,9 @@ def refill(max_new: int, budget_min: float) -> int:
         print("no RapidAPI keys -> nothing to do")
         return 0
     doc = P.load(WORK)
+    gone = P.drop_used(doc, used_source_ids())
+    if gone:
+        print(f"pool: {gone} clip(s) already in a video -> marked used")
     refilling, want = P.refill_plan(doc)
     doc["refilling"] = refilling
     print(f"pool: {len(P.usable(doc))} usable, refilling={refilling}, want +{want}")

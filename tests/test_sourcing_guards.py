@@ -115,7 +115,8 @@ def test_danza_kuduro_original_and_alternates():
     assert SY._score(vevo, r10["title"], r10["artist"]) >= 4
     assert SY._score({"title": "Danza Kuduro (Slowed + Reverb)", "channel": "x", "duration": 220},
                      r10["title"], r10["artist"]) < 4
-    assert "romance_10.mp3" in json.loads((root / "config" / "songs_refetch.json").read_text())["files"]
+    refetch = json.loads((root / "config" / "songs_refetch.json").read_text())["files"]
+    assert "romance_10.mp3" in refetch or refetch == []   # pending, or the sync already re-downloaded it
     alts = json.loads((root / "config" / "songs_alternates.json").read_text())
     titles = {s["title"].lower() for s in cat}
     for mood in ("dark", "epic"):

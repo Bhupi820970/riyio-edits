@@ -58,6 +58,22 @@ Repo variable: `RIYIO_AUTO_PUBLISH`.
 | Post history | `history.json` |
 | Allowed channels | `channels/channels.txt` |
 
+## 4b. No clip repeats (clip ledger, 2026-11-26)
+- `pipeline_lib/clip_reserve.py` keeps `clip_reservations.json` on branch **`clip-state`** (YouTube ids only,
+  no media). Every write goes through the GitHub contents API with the file sha (compare-and-swap; a conflict
+  is retried). No workflow has a push trigger, so writes to `clip-state` start nothing.
+- `run_v2.py` reserves every source video the moment it picks it: the main clip (links, pool, trusted
+  channels, search, `source_url`) and each montage extra (shot library, channels, search). When the final
+  4K video renders, its sources are marked `used` for good; rejected candidates and failed runs release
+  theirs; a reservation older than 8 h expires. Ledger unreachable -> that clip is skipped.
+- One source video = one riyio video, ever, so no segment of it can come back either (montage_select
+  already stops repeats inside one video).
+- Clip pool: `scripts/clip_pool.py refill` marks pool clips already in a video (ledger + links used) as
+  `used` before counting, and never re-fetches them, so the usable count is honest.
+- Seeded with the 12 sources already used (links/used.txt used + channel-used, shot library).
+- Not covered: the old `produce.yml` (manual dispatch only, legacy `run.py`).
+- Tests: `tests/test_clip_reserve.py` (works with pytest and plain `python`).
+
 ## 5. Setting up a new computer
 
 Nothing has to run on a computer.

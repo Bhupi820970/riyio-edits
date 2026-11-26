@@ -18,6 +18,29 @@ from pipeline_lib import song_mood as SM
 from pipeline_lib import shot_library as SL
 from pipeline_lib import clip_pool as POOL
 from pipeline_lib import dialogue_guard as DG
+from pipeline_lib import clip_reserve as CR
+
+# No-repeat clip ledger (pipeline_lib/clip_reserve.py, branch clip-state): every source video is reserved
+# the moment this run picks it (main clip and montage extras), used for good once the video renders,
+# released on failure; unreachable ledger -> the clip is skipped.
+RUN_ID = f"{os.environ.get('GITHUB_RUN_ID', 'local')}-{os.environ.get('GITHUB_RUN_ATTEMPT', '1')}"
+RES = CR.Reservations(owner=RUN_ID, platform="riyio-v2", video=RUN_ID)
+
+
+def _claim(url) -> bool:
+    """Reserve a source before downloading it; False = used by an earlier video, held by another run,
+    or the ledger is unreachable (skip it, never risk a repeat)."""
+    if RES.reserve(url):
+        return True
+    print(f"CLIP SKIPPED (already used / held / ledger down): {url}", flush=True)
+    return False
+
+
+def _video_sources(ctx) -> list:
+    pl = (ctx or {}).get("plan") or {}
+    src = pl.get("source") or {}
+    out = [(ctx or {}).get("source_url"), src.get("url")] + [x.get("url") for x in pl.get("extra_sources") or [] if isinstance(x, dict)]
+    return [u for u in out if u]
 
 # Rotating famous-scene bank by GENRE: iconic ENGLISH dialogue (anime = English dub; sports/games may use
 # English commentary / team radio / cutscene dialogue). GENRE env forces a genre, QUERY env forces a query.
@@ -388,6 +411,8 @@ def fetch_extra_sources(info, plan, context, used_urls):
     for ls in SL.sources_for(SHOT_LIB, key, exclude_ids={main_id}, exclude_urls=used_urls)[:MAX_EXTRA]:
         if got >= MAX_EXTRA or tried >= 4:
             return
+        if not _claim(ls["url"]):
+            continue
         tried += 1
         used_urls.add(ls["url"])
         xpath = Path(f"clips/extra_{got + 1}.mp4")
@@ -427,6 +452,8 @@ def fetch_extra_sources(info, plan, context, used_urls):
             if got >= MAX_EXTRA or tried >= 4:
                 break
             if it["url"] in used_urls or link_queue._vid(it["url"]) == main_id:
+                continue
+            if not _claim(it["url"]):
                 continue
             tried += 1
             used_urls.add(it["url"])
@@ -924,9 +951,15 @@ def _pool_mark(url, state, note=""):
 
 
 def _attempt(url, hint, query, used_urls, demo, n, link=False, track=None):
+    if not _claim(url):
+        used_urls.add(url)
+        REJECTS.append({"n": n, "query": query, "title": (hint or {}).get("title", "") or url,
+                        "reason": "clip already used in a video / held by another run"})
+        return None
     try:
         src, info, dur, w, h = fetch_and_screen(url, hint, used_urls)
         ctx = build_draft(src, info, dur, w, h, query, demo, n, used_urls)
+        ctx["source_url"] = url
         _pool_mark(url, "used")
         Path("rejects.json").write_text(json.dumps(REJECTS, indent=2))
         if link or track:
@@ -939,6 +972,7 @@ def _attempt(url, hint, query, used_urls, demo, n, link=False, track=None):
         REJECTS.append({"n": n, "query": query, "title": (hint or {}).get("title", "") or url, "channel": ch,
                         "reason": str(e)[:200]})
         print("CANDIDATE REJECTED:", e, flush=True)
+        RES.release([url])
         _pool_mark(url, "rejected", str(e))
         if link or track:
             link_queue.mark(url, "rejected", str(e))
@@ -946,6 +980,7 @@ def _attempt(url, hint, query, used_urls, demo, n, link=False, track=None):
         REJECTS.append({"n": n, "query": query, "title": (hint or {}).get("title", "") or url, "reason": "error: " + repr(e)[:180]})
         traceback.print_exc()
         print("CANDIDATE FAILED (trying next):", repr(e)[:300], flush=True)
+        RES.release([url])
         _pool_mark(url, "rejected", "error: " + repr(e)[:120])
         if link or track:
             link_queue.mark(url, "rejected", "error: " + repr(e)[:150])
@@ -980,7 +1015,8 @@ def build_with_candidates(tried, used_urls, demo):
         POOL_DOC = None
         print("clip pool unavailable:", repr(e)[:120], flush=True)
     forced_genre = os.environ.get("GENRE", "").strip().lower()
-    pool_entries = POOL.usable(POOL_DOC or {})
+    taken = RES.taken_ids()
+    pool_entries = [e for e in POOL.usable(POOL_DOC or {}) if CR.base_id(e.get("url")) not in taken]
     if forced_genre:
         pool_entries = [e for e in pool_entries if e.get("genre") in (forced_genre, "trusted")]
     random.shuffle(pool_entries)
@@ -993,7 +1029,8 @@ def build_with_candidates(tried, used_urls, demo):
         if ctx:
             return ctx
     # 3) trusted channels (channels/channels.txt): recent/popular scene clips, still pre-screened
-    skip_ids = link_queue.used_ids() | {link_queue._vid(u) for u in used_urls}
+    skip_ids = link_queue.used_ids() | {link_queue._vid(u) for u in used_urls} | \
+        {k[3:] for k in taken if k.startswith("yt:")}
     ch_rejects = {}
     for v in channel_source.candidates(skip_ids):
         if ch_rejects.get(v["channel"], 0) >= 2 or channel_blocklist.is_blocked(v["channel"]):
@@ -1015,7 +1052,8 @@ def build_with_candidates(tried, used_urls, demo):
             break
         tried.add(q)
         print(f"=== QUERY [{genre_of(q)}]: {q}", flush=True)
-        for it in search_candidates(search_terms(q), exclude=used_urls)[:PER_QUERY]:
+        for it in [c for c in search_candidates(search_terms(q), exclude=used_urls)
+                   if CR.base_id(c.get("url")) not in taken][:PER_QUERY]:
             if downloads >= MAX_DOWNLOADS:
                 break
             downloads += 1
@@ -1156,12 +1194,18 @@ def main():
     final = Path("out.final.mp4")
     upscale_hdr(draft, final, preset="medium", fps60=True)   # 60 fps smoothing, then 4K
     print("FINAL", final.stat().st_size, "dur", probe_duration(final), flush=True)
+    try:   # rendered: its sources are used for good; anything else this run held is given back
+        RES.confirm(_video_sources(ctx), video=RUN_ID)
+    except Exception as e:
+        print("clip ledger confirm failed:", type(e).__name__, flush=True)
+    RES.release()
     buffer_post("", ctx["props"]["post_caption"], demo)
 
 
 if __name__ == "__main__":
     try:
         main()
-    except Exception:
+    except BaseException:
         traceback.print_exc()
+        RES.release()          # render failed: the clips go back (a killed job expires after 8 h)
         raise

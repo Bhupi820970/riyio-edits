@@ -48,6 +48,17 @@ def usable(doc: dict) -> list[dict]:
     return [c for c in doc.get("clips") or [] if c.get("state") == "ready"]
 
 
+def drop_used(doc: dict, used_ids: set[str]) -> int:
+    """Ready clips whose YouTube id is already in a video (clip ledger / links used) become 'used', so
+    the usable count and the refill only see clips that can still go into a new video."""
+    n = 0
+    for c in doc.get("clips") or []:
+        if c.get("state") == "ready" and c.get("id") and c["id"] in used_ids:
+            c["state"], c["note"] = "used", "already in a video (clip ledger)"
+            n += 1
+    return n
+
+
 def refill_plan(doc: dict) -> tuple[bool, int]:
     """(refilling, how many to add). Start at <= REFILL_AT usable, stop at >= TARGET."""
     n = len(usable(doc))
