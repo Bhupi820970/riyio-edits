@@ -41,3 +41,4 @@
 2026-11-26 17:42 IST	rejected	https://www.youtube.com/watch?v=y1pFtE8atxw	no comedy song fits the timeline (dialogue 17.9s)
 2026-11-26 17:44 IST	rejected	https://www.youtube.com/watch?v=yb4dLRM3s5Y	no comedy song fits the timeline (dialogue 14.4s)
 2026-11-26 17:53 IST	rejected	https://www.youtube.com/watch?v=JWSUnKScFxw	captions would be song lyrics, not dialogue: ['repeated lyric-like phrases (39% of words)']
+2026-11-28 21:20 IST	channel-used	https://www.youtube.com/watch?v=pCT_EIfELo8	“We Are Family Now!” | MEET THE FOCKERS (2004) Movie CLIP 4K
